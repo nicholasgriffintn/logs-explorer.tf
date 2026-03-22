@@ -1,0 +1,54 @@
+services:
+  superset-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tf2-superset-init
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-change-me-in-prod}
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+      SUPERSET_ADMIN_FIRSTNAME: ${SUPERSET_ADMIN_FIRSTNAME:-TF2}
+      SUPERSET_ADMIN_LASTNAME: ${SUPERSET_ADMIN_LASTNAME:-Admin}
+      SUPERSET_ADMIN_EMAIL: ${SUPERSET_ADMIN_EMAIL:-admin@example.com}
+    volumes:
+      - superset_home:/app/superset_home
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+    command:
+      - /bin/sh
+      - -c
+      - |
+        superset db upgrade && \
+        superset fab create-admin \
+          --username "$$SUPERSET_ADMIN_USERNAME" \
+          --firstname "$$SUPERSET_ADMIN_FIRSTNAME" \
+          --lastname "$$SUPERSET_ADMIN_LASTNAME" \
+          --email "$$SUPERSET_ADMIN_EMAIL" \
+          --password "$$SUPERSET_ADMIN_PASSWORD" || true && \
+        superset init
+    restart: "no"
+
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tf2-superset
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-change-me-in-prod}
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    ports:
+      - "8088:8088"
+    volumes:
+      - superset_home:/app/superset_home
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    command:
+      - /bin/sh
+      - -c
+      - superset run -h 0.0.0.0 -p 8088
+
+volumes:
+  superset_home:

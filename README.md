@@ -56,7 +56,9 @@ Follow:
 
 ## Analytics and dashboards
 
-You can find the query index, starter queries, and run commands in: `infra/trino/queries/README.md`
+- Query index, starter queries, and run commands: `infra/trino/queries/README.md`
+- Superset dashboard workspace setup: `infra/superset/README.md`
+- Refresh operations and recovery guidance: `docs/refresh-operations-runbook.md`
 
 ## Development commands
 

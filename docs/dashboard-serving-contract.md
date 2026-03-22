@@ -59,6 +59,7 @@ Contract rules:
 - Select only required columns; avoid `SELECT *`.
 - Avoid joining serving tables back to `core` or `features` in dashboard paths.
 - Cache frequent slices where the BI tool supports cached extracts.
+- Use Superset setup in `infra/superset/README.md` for local dashboard rollout.
 
 Starter query pack:
 

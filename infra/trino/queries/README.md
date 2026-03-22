@@ -98,3 +98,7 @@ docker exec -i tf2-trino trino < infra/trino/queries/23_dashboard_chat_behaviour
 ```
 
 Set query parameters in each file's `params` CTE before running.
+
+For Superset setup and Trino datasource wiring, use:
+
+- `/infra/superset/README.md`
