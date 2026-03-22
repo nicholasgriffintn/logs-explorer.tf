@@ -31,6 +31,13 @@ SHOW TABLES FROM tf2.default;
 - `12_build_features_player_recent_form.sql`: build rolling form and momentum features per player
 - `13_build_serving_player_profiles.sql`: build serving table for per-player dashboard/profile reads
 - `14_build_serving_map_overview_daily.sql`: build serving table for map/day dashboard reads
+- `15_incremental_refresh_features_player_match.sql`: incremental refresh for match-level features
+- `16_incremental_refresh_features_player_recent_form.sql`: incremental refresh for rolling form features
+- `17_incremental_refresh_serving_player_profiles.sql`: incremental refresh for player profile serving rows
+- `18_incremental_refresh_serving_map_overview_daily.sql`: incremental refresh for map/day serving rows
+- `19_data_quality_checks.sql`: quality gate checks with PASS/FAIL thresholds
+- `20_ops_pipeline_runs.sql`: run metadata table for refresh orchestration
+- `run_refresh_pipeline.sh`: one command runner for full/incremental refresh + quality checks
 
 ## Usage notes
 
@@ -40,7 +47,7 @@ SHOW TABLES FROM tf2.default;
 
 ## Full processing flow
 
-If you want to build `features` and `serving` layers on top of your existing core tables, run:
+If you want to rebuild `features` and `serving` from full core history, run:
 
 ```bash
 docker exec -i tf2-trino trino < infra/trino/queries/11_build_features_player_match.sql
@@ -48,3 +55,31 @@ docker exec -i tf2-trino trino < infra/trino/queries/12_build_features_player_re
 docker exec -i tf2-trino trino < infra/trino/queries/13_build_serving_player_profiles.sql
 docker exec -i tf2-trino trino < infra/trino/queries/14_build_serving_map_overview_daily.sql
 ```
+
+## Incremental processing flow
+
+If you want to refresh only changed windows/players, run:
+
+```bash
+docker exec -i tf2-trino trino < infra/trino/queries/15_incremental_refresh_features_player_match.sql
+docker exec -i tf2-trino trino < infra/trino/queries/16_incremental_refresh_features_player_recent_form.sql
+docker exec -i tf2-trino trino < infra/trino/queries/17_incremental_refresh_serving_player_profiles.sql
+docker exec -i tf2-trino trino < infra/trino/queries/18_incremental_refresh_serving_map_overview_daily.sql
+docker exec -i tf2-trino trino < infra/trino/queries/19_data_quality_checks.sql
+```
+
+## Orchestrated runner
+
+Use the single entrypoint script to run refresh + checks in order and persist run metadata:
+
+```bash
+infra/trino/queries/run_refresh_pipeline.sh incremental
+```
+
+```bash
+infra/trino/queries/run_refresh_pipeline.sh full
+```
+
+Operational details and failure recovery are documented in:
+
+- `/docs/refresh-operations-runbook.md`

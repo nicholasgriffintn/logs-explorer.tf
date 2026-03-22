@@ -94,5 +94,4 @@ GROUP BY
   r30.recent_30_avg_kills,
   r30.recent_30_avg_damage,
   r30.recent_30_avg_impact,
-  r30.recent_30_win_rate
-HAVING COUNT(*) >= 10;
+  r30.recent_30_win_rate;

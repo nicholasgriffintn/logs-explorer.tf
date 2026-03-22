@@ -2,7 +2,7 @@
 
 Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` using Cloudflare Pipelines, R2 Data Catalog, and Apache Trino.
 
-> NOTE: This was built with AI as a quick example of how this data could be ingested and explored. It is not under active development, I'm just having a bit of fun.
+> NOTE: This was built with the help of AI, I did quite a bit of work but the AI was also super helpful. I'm sharing this as an example of how these sorts of systems can be built with Cloudflare services and also as a platform to have a bit of fun with myself.
 
 ## Monorepo layout
 
