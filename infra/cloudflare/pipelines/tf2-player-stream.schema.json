@@ -1,0 +1,23 @@
+{
+  "type": "structured",
+  "format": "json",
+  "fields": [
+    { "name": "recordId", "type": "string", "required": true },
+    { "name": "logId", "type": "int64", "required": true },
+    { "name": "title", "type": "string", "required": true },
+    { "name": "map", "type": "string", "required": true },
+    { "name": "sourceDateEpochSeconds", "type": "int64", "required": true },
+    { "name": "sourceDateIso", "type": "string", "required": true },
+    { "name": "steamId", "type": "string", "required": true },
+    { "name": "team", "type": "string", "required": false },
+    { "name": "kills", "type": "int64", "required": false },
+    { "name": "assists", "type": "int64", "required": false },
+    { "name": "deaths", "type": "int64", "required": false },
+    { "name": "damageDealt", "type": "int64", "required": false },
+    { "name": "damageTaken", "type": "int64", "required": false },
+    { "name": "healingDone", "type": "int64", "required": false },
+    { "name": "ubersUsed", "type": "int64", "required": false },
+    { "name": "classesPlayedCsv", "type": "string", "required": false },
+    { "name": "ingestedAt", "type": "string", "required": true }
+  ]
+}

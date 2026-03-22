@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tf2-logs-ingest-service",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-22",
+  "triggers": {
+    "crons": ["*/2 * * * *"],
+  },
+  "vars": {
+    "LOGS_TF_API_BASE": "https://logs.tf/api/v1",
+    "LOGS_TF_PAGE_SIZE": "10",
+    "LOGS_TF_MAX_PAGES_PER_RUN": "2",
+    "LOGS_TF_REQUEST_DELAY_MS": "250",
+    "LOGS_TF_FETCH_RETRIES": "4",
+    "PIPELINES_BATCH_SIZE": "50",
+    "LOGS_TF_MAX_FAILED_LOGS": "500",
+  },
+  "kv_namespaces": [
+    {
+      "binding": "INGEST_CURSOR_KV",
+      "id": "23cf8770fc684fa6b33080ea11848e09",
+    },
+  ],
+  "pipelines": [
+    {
+      "pipeline": "e5f0dd368ce145a5b91af5a55fb6c027",
+      "binding": "TF2_LOGS_STREAM",
+    },
+    {
+      "pipeline": "35461118d38d4a0dba2b6b37524c5999",
+      "binding": "TF2_CHAT_STREAM",
+    },
+    {
+      "pipeline": "d23c7b379e69490ebe1af77cc149c1ed",
+      "binding": "TF2_PLAYERS_STREAM",
+    },
+  ],
+}

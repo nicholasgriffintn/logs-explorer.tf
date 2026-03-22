@@ -1,0 +1,10 @@
+services:
+  trino:
+    image: trinodb/trino:471
+    container_name: tf2-trino
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./catalog:/etc/trino/catalog:ro
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xmx2G

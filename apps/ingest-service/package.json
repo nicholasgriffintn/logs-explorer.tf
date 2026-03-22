@@ -1,0 +1,21 @@
+{
+  "name": "@logs-explorer/ingest-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@logs-explorer/tf2-log-model": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite-plus": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

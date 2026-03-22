@@ -1,0 +1,18 @@
+connector.name=iceberg
+
+# Cloudflare R2 Data Catalog REST endpoint
+iceberg.catalog.type=rest
+iceberg.rest-catalog.uri=<CATALOG_URI>
+iceberg.rest-catalog.warehouse=<WAREHOUSE>
+
+# Token auth is the simplest path for R2 Data Catalog.
+iceberg.rest-catalog.security=OAUTH2
+iceberg.rest-catalog.oauth2.token=<R2_CATALOG_TOKEN>
+
+# R2 object storage access
+fs.native-s3.enabled=true
+s3.endpoint=<R2_ENDPOINT>
+s3.region=auto
+s3.path-style-access=true
+s3.aws-access-key=<R2_ACCESS_KEY_ID>
+s3.aws-secret-key=<R2_SECRET_ACCESS_KEY>

@@ -1,0 +1,20 @@
+{
+  "type": "structured",
+  "format": "json",
+  "fields": [
+    { "name": "recordId", "type": "string", "required": true },
+    { "name": "logId", "type": "int64", "required": true },
+    { "name": "title", "type": "string", "required": true },
+    { "name": "map", "type": "string", "required": true },
+    { "name": "sourceDateEpochSeconds", "type": "int64", "required": true },
+    { "name": "sourceDateIso", "type": "string", "required": true },
+    { "name": "sourcePlayerCount", "type": "int64", "required": true },
+    { "name": "sourceViewCount", "type": "int64", "required": true },
+    { "name": "durationSeconds", "type": "int64", "required": false },
+    { "name": "redScore", "type": "int64", "required": false },
+    { "name": "blueScore", "type": "int64", "required": false },
+    { "name": "uploaderSteamId", "type": "string", "required": false },
+    { "name": "payloadSchemaVersion", "type": "int64", "required": false },
+    { "name": "ingestedAt", "type": "string", "required": true }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "type": "structured",
+  "format": "json",
+  "fields": [
+    { "name": "recordId", "type": "string", "required": true },
+    { "name": "logId", "type": "int64", "required": true },
+    { "name": "title", "type": "string", "required": true },
+    { "name": "map", "type": "string", "required": true },
+    { "name": "sourceDateEpochSeconds", "type": "int64", "required": true },
+    { "name": "sourceDateIso", "type": "string", "required": true },
+    { "name": "messageIndex", "type": "int64", "required": true },
+    { "name": "steamId", "type": "string", "required": false },
+    { "name": "playerName", "type": "string", "required": false },
+    { "name": "message", "type": "string", "required": true },
+    { "name": "messageLower", "type": "string", "required": true },
+    { "name": "ingestedAt", "type": "string", "required": true }
+  ]
+}
