@@ -54,20 +54,9 @@ Follow:
 
 - `infra/trino/README.md`
 
-## Advanced analytics queries
+## Analytics and dashboards
 
-An advanced Trino query pack is available at:
-
-- `infra/trino/queries/README.md`
-
-Start with:
-
-- `00_log_player_breakdown.sql` for one-log analysis (defaults to example log `4031015`)
-- `01_player_activity_baseline.sql` for full-history player baselines
-- `04_player_pair_synergy.sql` and `09_player_coplay_network.sql` for cross-player ID analysis
-
-These queries assume `tf2.default.logs`, `tf2.default.summaries`, and `tf2.default.messages`.
-If your Data Catalog namespace differs, update table names after running `SHOW SCHEMAS` / `SHOW TABLES`.
+You can find the query index, starter queries, and run commands in: `infra/trino/queries/README.md`
 
 ## Development commands
 

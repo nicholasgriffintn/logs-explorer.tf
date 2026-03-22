@@ -37,6 +37,9 @@ SHOW TABLES FROM tf2.default;
 - `18_incremental_refresh_serving_map_overview_daily.sql`: incremental refresh for map/day serving rows
 - `19_data_quality_checks.sql`: quality gate checks with PASS/FAIL thresholds
 - `20_ops_pipeline_runs.sql`: run metadata table for refresh orchestration
+- `21_dashboard_player_profile_and_momentum.sql`: dashboard slice for one player profile and momentum trend context
+- `22_dashboard_map_competitiveness_and_pace.sql`: dashboard map ranking for competitiveness, pace, and activity
+- `23_dashboard_chat_behaviour_and_tilt_risk.sql`: dashboard summaries for chat behaviour and tilt risk
 - `run_refresh_pipeline.sh`: one command runner for full/incremental refresh + quality checks
 
 ## Usage notes
@@ -83,3 +86,15 @@ infra/trino/queries/run_refresh_pipeline.sh full
 Operational details and failure recovery are documented in:
 
 - `/docs/refresh-operations-runbook.md`
+
+## Dashboard starter pack
+
+Use these `serving_*`-only queries for initial dashboard tiles:
+
+```bash
+docker exec -i tf2-trino trino < infra/trino/queries/21_dashboard_player_profile_and_momentum.sql
+docker exec -i tf2-trino trino < infra/trino/queries/22_dashboard_map_competitiveness_and_pace.sql
+docker exec -i tf2-trino trino < infra/trino/queries/23_dashboard_chat_behaviour_and_tilt_risk.sql
+```
+
+Set query parameters in each file's `params` CTE before running.

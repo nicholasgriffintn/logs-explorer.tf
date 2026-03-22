@@ -60,6 +60,12 @@ Contract rules:
 - Avoid joining serving tables back to `core` or `features` in dashboard paths.
 - Cache frequent slices where the BI tool supports cached extracts.
 
+Starter query pack:
+
+- `infra/trino/queries/21_dashboard_player_profile_and_momentum.sql`
+- `infra/trino/queries/22_dashboard_map_competitiveness_and_pace.sql`
+- `infra/trino/queries/23_dashboard_chat_behaviour_and_tilt_risk.sql`
+
 ## Change management
 
 - **Non-breaking changes**: add nullable columns, add derived metrics that do not alter existing semantics.
