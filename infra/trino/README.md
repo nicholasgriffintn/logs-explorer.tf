@@ -25,18 +25,29 @@ docker exec -it tf2-trino trino
 Example query:
 
 ```sql
-# Verify connection and schema
+-- Verify connection and schema
 SHOW SCHEMAS FROM tf2;
 
-# List tables in the default schema
+-- List tables in the default schema
 SHOW TABLES FROM tf2.default;
 
-# Sample query to preview logs data
+-- Sample query to preview logs data
 SELECT logid, map, sourcedateiso FROM tf2.default.logs ORDER BY logid DESC LIMIT 20;
 
-# Sample query to preview chat data
+-- Sample query to preview chat data
 SELECT logid, map, sourcedateiso FROM tf2.default.messages ORDER BY logid DESC LIMIT 20;
 
-# Sample query to preview summaries data
+-- Sample query to preview summaries data
 SELECT logid, map, sourcedateiso FROM tf2.default.summaries ORDER BY logid DESC LIMIT 20;
 ```
+
+## Advanced query pack
+
+Use the SQL files under `infra/trino/queries` for deeper analytics:
+
+- player activity and form trends
+- pair synergy and head-to-head comparisons
+- map specialisation and class flexibility
+- sentiment feature export for downstream modelling
+
+Entry point: `infra/trino/queries/README.md`.

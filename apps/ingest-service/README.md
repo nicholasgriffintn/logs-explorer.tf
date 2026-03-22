@@ -2,16 +2,80 @@
 
 Cloudflare Worker that incrementally ingests TF2 logs from `logs.tf` into Cloudflare Pipelines.
 
-## Behaviour
+## Source log structure
 
-- polls `https://logs.tf/api/v1/log`
-- fetches full details from `https://logs.tf/api/v1/log/:id`
-- validates and normalises payloads using `@logs-explorer/tf2-log-model`
-- writes cursor and failure retry state to `INGEST_CURSOR_KV`
-- emits fan-out datasets:
-  - core logs to `TF2_LOGS_STREAM`
-  - chat messages to `TF2_CHAT_STREAM`
-  - player summaries to `TF2_PLAYERS_STREAM`
+### `/api/v1/log` list payload
+
+The list endpoint returns summaries like:
+
+```json
+{
+  "success": true,
+  "results": 1000,
+  "total": 4010879,
+  "parameters": {},
+  "logs": [
+    {
+      "id": 4031052,
+      "title": "serveme.tf #1537392 BLU vs RED",
+      "map": "cp_snakewater_final1",
+      "date": 1774213787,
+      "views": 0,
+      "players": 13
+    }
+  ]
+}
+```
+
+### `/api/v1/log/:id` detail payload
+
+Detail payloads include nested match data (`teams`, `players`, `rounds`, `healspread`, `chat`, etc).
+The ingest service fans this into dedicated analytics datasets (core logs, chat messages, player summaries).
+
+## Ingestion design
+
+The ingest service is designed to avoid overloading `logs.tf` and to prevent silent data loss:
+
+- incremental cursor (`lastIngestedLogId`) stored in Worker KV
+- bounded pagination per run (`LOGS_TF_MAX_PAGES_PER_RUN`)
+- request spacing (`LOGS_TF_REQUEST_DELAY_MS`) and retry budget (`LOGS_TF_FETCH_RETRIES`)
+- retry queue for failed logs with exponential backoff
+- batched downstream writes (`PIPELINES_BATCH_SIZE`)
+- strict payload validation before emission
+
+This gives predictable API pressure, resumable ingestion, and safer long-running operation.
+
+## Data contracts to Pipelines
+
+### Core logs table (`logs`, typically `tf2.default.logs`)
+
+From stream: `TF2_LOGS_STREAM`
+
+- `recordId` (idempotency key)
+- `logId`, `title`, `map`
+- source metadata (`sourceDateEpochSeconds`, `sourceDateIso`, `sourcePlayerCount`, `sourceViewCount`)
+- match summary (`durationSeconds`, `redScore`, `blueScore`)
+- provenance (`uploaderSteamId`, `payloadSchemaVersion`, `ingestedAt`)
+
+Schema: `infra/cloudflare/pipelines/tf2-log-stream.schema.json`
+
+### Chat messages table (`messages`, typically `tf2.default.messages`)
+
+From stream: `TF2_CHAT_STREAM`
+
+- one row per chat line with `message`, `messageLower`, `steamId`, `playerName`
+- enables moderation workflows (for example slur keyword filters) and chat behaviour analysis
+
+Schema: `infra/cloudflare/pipelines/tf2-chat-stream.schema.json`
+
+### Player summaries table (`summaries`, typically `tf2.default.summaries`)
+
+From stream: `TF2_PLAYERS_STREAM`
+
+- one row per player per log with kills/assists/deaths/damage/healing/ubers/team/classes
+- supports per-class, per-player, and per-map performance analytics
+
+Schema: `infra/cloudflare/pipelines/tf2-player-stream.schema.json`
 
 ## Endpoints
 

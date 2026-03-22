@@ -10,8 +10,8 @@
   },
   "vars": {
     "LOGS_TF_API_BASE": "https://logs.tf/api/v1",
-    "LOGS_TF_PAGE_SIZE": "10",
-    "LOGS_TF_MAX_PAGES_PER_RUN": "2",
+    "LOGS_TF_PAGE_SIZE": "200",
+    "LOGS_TF_MAX_PAGES_PER_RUN": "5",
     "LOGS_TF_REQUEST_DELAY_MS": "250",
     "LOGS_TF_FETCH_RETRIES": "4",
     "PIPELINES_BATCH_SIZE": "50",
