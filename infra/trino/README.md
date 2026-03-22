@@ -25,9 +25,18 @@ docker exec -it tf2-trino trino
 Example query:
 
 ```sql
+# Verify connection and schema
 SHOW SCHEMAS FROM tf2;
-SHOW TABLES FROM tf2.tf2_core;
-SHOW TABLES FROM tf2.tf2_chat;
-SHOW TABLES FROM tf2.tf2_players;
-SELECT logid, map, sourcedateiso FROM tf2.tf2_core.logs ORDER BY logid DESC LIMIT 20;
+
+# List tables in the default schema
+SHOW TABLES FROM tf2.default;
+
+# Sample query to preview logs data
+SELECT logid, map, sourcedateiso FROM tf2.default.logs ORDER BY logid DESC LIMIT 20;
+
+# Sample query to preview chat data
+SELECT logid, map, sourcedateiso FROM tf2.default.messages ORDER BY logid DESC LIMIT 20;
+
+# Sample query to preview summaries data
+SELECT logid, map, sourcedateiso FROM tf2.default.summaries ORDER BY logid DESC LIMIT 20;
 ```
