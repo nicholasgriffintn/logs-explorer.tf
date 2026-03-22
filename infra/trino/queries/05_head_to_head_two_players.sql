@@ -1,4 +1,5 @@
 WITH params AS (
+  -- Replace both values with real Steam IDs from tf2.default.summaries.
   SELECT
     '76561198000000001' AS player_1_steam_id,
     '76561198000000002' AS player_2_steam_id

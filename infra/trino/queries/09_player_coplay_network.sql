@@ -1,4 +1,5 @@
 WITH params AS (
+  -- Replace with a real Steam ID from tf2.default.summaries.
   SELECT '76561198000000000' AS target_steam_id
 ),
 target_logs AS (
@@ -49,6 +50,7 @@ SELECT
   ) AS win_rate_when_teammates
 FROM coplay_scored
 GROUP BY target_steam_id, other_steam_id
+-- Lower this threshold if your dataset is still small.
 HAVING COUNT(*) >= 5
 ORDER BY shared_games DESC, same_team_rate DESC
 LIMIT 300;

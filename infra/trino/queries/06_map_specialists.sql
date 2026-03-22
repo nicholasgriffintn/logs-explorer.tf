@@ -1,4 +1,5 @@
 WITH params AS (
+  -- Lower thresholds if your dataset is still small.
   SELECT
     30 AS min_games_overall,
     8 AS min_games_on_map

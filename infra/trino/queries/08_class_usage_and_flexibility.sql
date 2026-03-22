@@ -1,4 +1,5 @@
 WITH params AS (
+  -- Lower this threshold if your dataset is still small.
   SELECT 25 AS min_games
 ),
 player_games AS (

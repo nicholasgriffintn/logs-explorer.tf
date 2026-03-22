@@ -30,6 +30,6 @@ SHOW TABLES FROM tf2.default;
 
 ## Usage notes
 
-- Queries include a `params` CTE when input is needed; replace sample Steam IDs first.
-- Most queries include minimum-game thresholds; tune these before drawing conclusions.
+- Queries include a `params` CTE when input is needed; replace sample Steam IDs and log IDs first.
+- Most queries include minimum-game thresholds; lower these if your dataset is still small.
 - These are written to run on full history; add date filters for faster iteration.

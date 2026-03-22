@@ -1,5 +1,6 @@
 -- Rolling form window is currently 12 games (11 preceding + current row).
 WITH params AS (
+  -- Replace with a real Steam ID from tf2.default.summaries.
   SELECT
     '76561198000000000' AS target_steam_id
 ),

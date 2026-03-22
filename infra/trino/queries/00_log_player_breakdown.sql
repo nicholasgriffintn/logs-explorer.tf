@@ -1,4 +1,5 @@
 WITH params AS (
+  -- Replace with a log ID that exists in your ingested dataset.
   SELECT 4031015 AS target_log_id
 ),
 team_totals AS (

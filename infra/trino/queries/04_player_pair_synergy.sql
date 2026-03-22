@@ -1,4 +1,7 @@
 WITH params AS (
+  -- Optional: set anchor_steam_id to limit output to pairs containing one player.
+  -- Leave as '' to include all pairs.
+  -- Lower min_games_together if your dataset is still small.
   SELECT
     '' AS anchor_steam_id,
     20 AS min_games_together

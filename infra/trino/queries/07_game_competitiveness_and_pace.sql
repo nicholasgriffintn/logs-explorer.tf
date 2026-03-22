@@ -29,5 +29,6 @@ SELECT
   ROUND(AVG(CASE WHEN score_delta >= 4 THEN 1.0 ELSE 0.0 END), 3) AS blowout_rate
 FROM game_base
 GROUP BY map
+-- Lower this threshold if your dataset is still small.
 HAVING COUNT(*) >= 20
 ORDER BY close_game_rate DESC, games DESC;

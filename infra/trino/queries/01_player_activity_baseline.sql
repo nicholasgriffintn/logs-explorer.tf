@@ -44,5 +44,6 @@ SELECT
   ROUND(AVG(CAST(won_game AS DOUBLE)), 3) AS win_rate
 FROM player_games
 GROUP BY steamid
+-- Lower this threshold if your dataset is still small.
 HAVING COUNT(*) >= 20
 ORDER BY games_played DESC, kd_ratio DESC;
