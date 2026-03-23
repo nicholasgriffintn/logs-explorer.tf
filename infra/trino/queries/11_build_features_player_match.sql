@@ -29,7 +29,7 @@ chat_by_player_game AS (
       CASE
         WHEN REGEXP_LIKE(
           messagelower,
-          '\\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\\b'
+          '\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\b'
         ) THEN 1
         ELSE 0
       END

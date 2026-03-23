@@ -38,6 +38,7 @@ The ingest service is designed to avoid overloading `logs.tf` and to prevent sil
 
 - incremental cursor (`lastIngestedLogId`) stored in Worker KV
 - bounded pagination per run (`LOGS_TF_MAX_PAGES_PER_RUN`)
+- optional full-history mode with queue-chained pagination (`INGEST_BACKFILL_QUEUE`)
 - request spacing (`LOGS_TF_REQUEST_DELAY_MS`) and retry budget (`LOGS_TF_FETCH_RETRIES`)
 - retry queue for failed logs with exponential backoff
 - batched downstream writes (`PIPELINES_BATCH_SIZE`)
@@ -82,6 +83,8 @@ Schema: `infra/cloudflare/pipelines/tf2-player-stream.schema.json`
 - `GET /health`
 - `GET /ingest?dryRun=true`
 - `POST /ingest`
+- `POST /ingest?mode=full-history[&offset=0]` (run one full-history chunk immediately)
+- `POST /ingest/full-history/start[?offset=0]` (seed queue-driven full-history run)
 
 ## Local dev
 
@@ -105,3 +108,4 @@ curl -X POST http://localhost:8787/ingest?dryRun=true
 - `TF2_LOGS_STREAM` (required)
 - `TF2_CHAT_STREAM` (required)
 - `TF2_PLAYERS_STREAM` (required)
+- `INGEST_BACKFILL_QUEUE` (required for queue-driven full-history mode)

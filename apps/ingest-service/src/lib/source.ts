@@ -8,15 +8,26 @@ import type { IngestConfig } from "./types";
 import { fetchJsonWithRetry, toListUrl } from "./http";
 import { sleep } from "./time";
 
-export async function collectNewSummaries(
+interface CollectSummariesOptions {
+  startOffset: number;
+  maxPages: number;
+  stopAtLogId?: number;
+}
+
+interface CollectedSummaries {
+  summaries: LogsTfLogSummary[];
+  nextOffset: number | null;
+}
+
+export async function collectSummaries(
   fetchFn: typeof fetch,
   config: IngestConfig,
-  lastIngestedLogId: number,
-): Promise<LogsTfLogSummary[]> {
+  options: CollectSummariesOptions,
+): Promise<CollectedSummaries> {
   const collected: LogsTfLogSummary[] = [];
-  let offset = 0;
+  let offset = options.startOffset;
 
-  for (let page = 0; page < config.maxPagesPerRun; page += 1) {
+  for (let page = 0; page < options.maxPages; page += 1) {
     const raw = await fetchJsonWithRetry(
       fetchFn,
       toListUrl(config, offset),
@@ -26,13 +37,16 @@ export async function collectNewSummaries(
     const parsed = parseLogListResponse(raw);
 
     if (parsed.logs.length === 0) {
-      break;
+      return {
+        summaries: sortSummariesAscending(dedupeSummariesByLogId(collected)),
+        nextOffset: null,
+      };
     }
 
     let reachedKnownBoundary = false;
 
     for (const summary of parsed.logs) {
-      if (summary.id <= lastIngestedLogId) {
+      if (options.stopAtLogId !== undefined && summary.id <= options.stopAtLogId) {
         reachedKnownBoundary = true;
         break;
       }
@@ -41,12 +55,45 @@ export async function collectNewSummaries(
     }
 
     if (reachedKnownBoundary || parsed.logs.length < config.pageSize) {
-      break;
+      return {
+        summaries: sortSummariesAscending(dedupeSummariesByLogId(collected)),
+        nextOffset: null,
+      };
     }
 
     offset += config.pageSize;
-    await sleep(config.requestDelayMs);
+
+    if (page < options.maxPages - 1) {
+      await sleep(config.requestDelayMs);
+    }
   }
 
-  return sortSummariesAscending(dedupeSummariesByLogId(collected));
+  return {
+    summaries: sortSummariesAscending(dedupeSummariesByLogId(collected)),
+    nextOffset: offset,
+  };
+}
+
+export async function collectNewSummaries(
+  fetchFn: typeof fetch,
+  config: IngestConfig,
+  lastIngestedLogId: number,
+): Promise<LogsTfLogSummary[]> {
+  const { summaries } = await collectSummaries(fetchFn, config, {
+    startOffset: 0,
+    maxPages: config.maxPagesPerRun,
+    stopAtLogId: lastIngestedLogId,
+  });
+  return summaries;
+}
+
+export async function collectFullHistorySummaries(
+  fetchFn: typeof fetch,
+  config: IngestConfig,
+  startOffset: number,
+): Promise<CollectedSummaries> {
+  return collectSummaries(fetchFn, config, {
+    startOffset,
+    maxPages: config.maxPagesPerRun,
+  });
 }

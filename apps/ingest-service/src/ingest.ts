@@ -20,10 +20,11 @@ import {
   pruneFailures,
   updateFailure,
 } from "./lib/retry";
-import { collectNewSummaries } from "./lib/source";
+import { collectFullHistorySummaries, collectNewSummaries } from "./lib/source";
 import { readState, writeState } from "./lib/state";
 import { sleep } from "./lib/time";
 import type {
+  IngestMode,
   IngestEnv,
   IngestResult,
   IngestState,
@@ -31,7 +32,15 @@ import type {
   RunIngestOptions,
 } from "./lib/types";
 
-export type { FailedLogState, IngestConfig, PipelinesStreamBinding } from "./lib/types";
+export type {
+  FailedLogState,
+  FullHistoryQueueMessage,
+  IngestConfig,
+  IngestMode,
+  PipelinesStreamBinding,
+  QueueBatch,
+  QueueBinding,
+} from "./lib/types";
 export type { IngestEnv, IngestResult, IngestState, KeyValueStore, RunIngestOptions };
 
 interface PreparedLogItem {
@@ -84,20 +93,34 @@ export async function runIngest(
   const now = options.now ?? new Date();
   const nowIso = now.toISOString();
   const nowEpochMs = now.getTime();
+  const mode: IngestMode = options.mode ?? "incremental";
   const fetchFn = options.fetchFn ?? fetch;
   const config = buildConfig(env);
   const state = await readState(env, nowIso);
 
   console.log("Current ingest state", state);
 
-  const newSummaries = await collectNewSummaries(fetchFn, config, state.lastIngestedLogId);
-  const retrySummaries = dueRetrySummaries(state, nowEpochMs);
-  const candidates = mergeCandidates(newSummaries, retrySummaries);
+  let newSummaries: LogsTfLogSummary[] = [];
+  let retrySummaries: LogsTfLogSummary[] = [];
+  let candidates: LogsTfLogSummary[] = [];
+  let nextBackfillOffset: number | null = null;
+
+  if (mode === "full-history") {
+    const offset = Math.max(0, options.fullHistoryOffset ?? 0);
+    const fullHistoryBatch = await collectFullHistorySummaries(fetchFn, config, offset);
+    newSummaries = fullHistoryBatch.summaries;
+    candidates = fullHistoryBatch.summaries;
+    nextBackfillOffset = fullHistoryBatch.nextOffset;
+  } else {
+    newSummaries = await collectNewSummaries(fetchFn, config, state.lastIngestedLogId);
+    retrySummaries = dueRetrySummaries(state, nowEpochMs);
+    candidates = mergeCandidates(newSummaries, retrySummaries);
+  }
 
   const preparedByLogId = new Map<number, PreparedLogItem>();
 
   console.log(
-    `Fetched ${newSummaries.length} new summaries and ${retrySummaries.length} retry summaries, total ${candidates.length} candidates to process`,
+    `Mode=${mode}. Fetched ${newSummaries.length} new summaries and ${retrySummaries.length} retry summaries, total ${candidates.length} candidates to process`,
     candidates.map((s) => s.id),
   );
 
@@ -183,6 +206,7 @@ export async function runIngest(
   console.log("Ingest run complete");
 
   return {
+    mode,
     fetchedNewLogs: newSummaries.length,
     retriedLogs: retrySummaries.length,
     emittedLogs: emittedCoreLogs,
@@ -191,6 +215,7 @@ export async function runIngest(
     emittedPlayerSummaries,
     failedLogs: Object.keys(state.failedLogs).length,
     lastIngestedLogId: state.lastIngestedLogId,
+    nextBackfillOffset,
   };
 }
 

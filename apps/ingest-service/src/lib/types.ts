@@ -14,11 +14,31 @@ export interface PipelinesStreamBinding<TRecord> {
   send(records: TRecord[]): Promise<void>;
 }
 
+export interface QueueBinding<TBody> {
+  send(body: TBody): Promise<void>;
+}
+
+export interface QueueMessage<TBody> {
+  body: TBody;
+}
+
+export interface QueueBatch<TBody> {
+  messages: QueueMessage<TBody>[];
+}
+
+export type IngestMode = "incremental" | "full-history";
+
+export interface FullHistoryQueueMessage {
+  mode: "full-history";
+  offset: number;
+}
+
 export interface IngestEnv {
   INGEST_CURSOR_KV: KeyValueStore;
   TF2_LOGS_STREAM: PipelinesStreamBinding<NormalizedLogRecord>;
   TF2_CHAT_STREAM: PipelinesStreamBinding<ChatMessageRecord>;
   TF2_PLAYERS_STREAM: PipelinesStreamBinding<PlayerSummaryRecord>;
+  INGEST_BACKFILL_QUEUE?: QueueBinding<FullHistoryQueueMessage>;
   LOGS_TF_API_BASE?: string;
   LOGS_TF_PAGE_SIZE?: string;
   LOGS_TF_MAX_PAGES_PER_RUN?: string;
@@ -42,6 +62,7 @@ export interface IngestState {
 }
 
 export interface IngestResult {
+  mode: IngestMode;
   fetchedNewLogs: number;
   retriedLogs: number;
   emittedLogs: number;
@@ -50,6 +71,7 @@ export interface IngestResult {
   emittedPlayerSummaries: number;
   failedLogs: number;
   lastIngestedLogId: number;
+  nextBackfillOffset: number | null;
 }
 
 export interface IngestConfig {
@@ -64,6 +86,8 @@ export interface IngestConfig {
 
 export interface RunIngestOptions {
   dryRun?: boolean;
+  mode?: IngestMode;
+  fullHistoryOffset?: number;
   now?: Date;
   fetchFn?: typeof fetch;
 }

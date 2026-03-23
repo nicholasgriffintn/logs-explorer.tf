@@ -82,8 +82,36 @@ function makeFetchStub(calls: string[]): typeof fetch {
       typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     calls.push(url);
 
-    if (url.includes("/logs?")) {
+    if (url.includes("/log?")) {
       return Response.json(listPayload([4031052, 4031051]));
+    }
+
+    const detailMatch = url.match(/\/log\/(\d+)$/);
+    if (detailMatch) {
+      return Response.json(detailPayload(Number(detailMatch[1])));
+    }
+
+    return new Response("not found", { status: 404 });
+  };
+}
+
+function makeFullHistoryFetchStub(calls: string[]): typeof fetch {
+  return async (input: RequestInfo | URL): Promise<Response> => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    calls.push(url);
+
+    const parsed = new URL(url);
+    const offset = Number(parsed.searchParams.get("offset") ?? "0");
+
+    if (parsed.pathname.endsWith("/log")) {
+      if (offset === 0) {
+        return Response.json(listPayload([4031052, 4031051]));
+      }
+      if (offset === 2) {
+        return Response.json(listPayload([4031050]));
+      }
+      return Response.json(listPayload([]));
     }
 
     const detailMatch = url.match(/\/log\/(\d+)$/);
@@ -124,17 +152,51 @@ test("runIngest fetches new logs and emits them", async () => {
     now: new Date("2026-03-22T12:00:00.000Z"),
   });
 
+  expect(result.mode).toBe("incremental");
   expect(result.fetchedNewLogs).toBe(2);
   expect(result.emittedLogs).toBe(2);
   expect(result.emittedCoreLogs).toBe(2);
   expect(result.emittedChatMessages).toBe(4);
   expect(result.emittedPlayerSummaries).toBe(2);
   expect(result.lastIngestedLogId).toBe(4031052);
-  expect(calls.some((url) => url.includes("/logs?"))).toBe(true);
+  expect(result.nextBackfillOffset).toBe(null);
+  expect(calls.some((url) => url.includes("/log?"))).toBe(true);
   expect(calls.some((url) => url.includes("/log/4031052"))).toBe(true);
   expect(logsStream.batches.flat()).toHaveLength(2);
   expect(chatStream.batches.flat()).toHaveLength(4);
   expect(playersStream.batches.flat()).toHaveLength(2);
+});
+
+test("runIngest full-history mode returns a continuation offset when more pages exist", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+  const calls: string[] = [];
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    LOGS_TF_PAGE_SIZE: "2",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const first = await runIngest(env, {
+    mode: "full-history",
+    fullHistoryOffset: 0,
+    fetchFn: makeFullHistoryFetchStub(calls),
+    now: new Date("2026-03-22T12:00:00.000Z"),
+  });
+
+  expect(first.mode).toBe("full-history");
+  expect(first.fetchedNewLogs).toBe(2);
+  expect(first.nextBackfillOffset).toBe(2);
+  expect(calls.some((url) => url.includes("offset=0"))).toBe(true);
+  expect(calls.some((url) => url.includes("/log/4031052"))).toBe(true);
 });
 
 test("runIngest fails fast when required logs binding is missing", async () => {
