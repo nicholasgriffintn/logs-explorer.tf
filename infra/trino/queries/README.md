@@ -40,6 +40,10 @@ SHOW TABLES FROM tf2.default;
 - `21_dashboard_player_profile_and_momentum.sql`: dashboard slice for one player profile and momentum trend context
 - `22_dashboard_map_competitiveness_and_pace.sql`: dashboard map ranking for competitiveness, pace, and activity
 - `23_dashboard_chat_behaviour_and_tilt_risk.sql`: dashboard summaries for chat behaviour and tilt risk
+- `24_serving_query_performance_benchmark.sql`: benchmark pack (`EXPLAIN ANALYZE`) for serving query latency checks
+- `25_build_ml_training_snapshot.sql`: materialise snapshot metadata + snapshot-scoped ML training dataset
+- `26_model_registry_tables.sql`: create lightweight model registry + stage history tables
+- `run_training_snapshot.sh`: one command runner for snapshot materialisation
 - `run_refresh_pipeline.sh`: one command runner for full/incremental refresh + quality checks
 
 ## Usage notes
@@ -102,3 +106,25 @@ Set query parameters in each file's `params` CTE before running.
 For Superset setup and Trino datasource wiring, use:
 
 - `/infra/superset/README.md`
+
+## Serving performance benchmark
+
+Run the benchmark pack to validate serving query latency targets:
+
+```bash
+docker exec -i tf2-trino trino < infra/trino/queries/24_serving_query_performance_benchmark.sql
+```
+
+## ML snapshot and registry
+
+Materialise a snapshot-scoped training dataset:
+
+```bash
+infra/trino/queries/run_training_snapshot.sh
+```
+
+Create model registry tables:
+
+```bash
+docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
+```

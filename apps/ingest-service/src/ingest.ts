@@ -8,6 +8,7 @@ import {
   type NormalizedLogRecord,
   type PlayerSummaryRecord,
 } from "@logs-explorer/tf2-log-model";
+
 import { buildConfig } from "./lib/config";
 import { emitDatasetBatch } from "./lib/emitter";
 import { fetchJsonWithRetry, toDetailUrl } from "./lib/http";

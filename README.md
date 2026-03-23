@@ -59,6 +59,12 @@ Follow:
 - Query index, starter queries, and run commands: `infra/trino/queries/README.md`
 - Superset dashboard workspace setup: `infra/superset/README.md`
 - Refresh operations and recovery guidance: `docs/refresh-operations-runbook.md`
+- Serving performance benchmark/tuning notes: `docs/serving-query-performance-tuning.md`
+
+## Machine learning operations
+
+- ML snapshot workflow: `docs/ml-training-snapshot-workflow.md`
+- Model registry policy: `docs/model-registry-and-versioning-policy.md`
 
 ## Development commands
 
