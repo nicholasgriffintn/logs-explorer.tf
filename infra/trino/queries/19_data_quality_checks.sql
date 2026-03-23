@@ -22,6 +22,10 @@ serving_maps AS (
   SELECT COUNT(*) AS row_count
   FROM tf2.default.serving_map_overview_daily
 ),
+serving_player_match_deep_dive AS (
+  SELECT COUNT(*) AS row_count
+  FROM tf2.default.serving_player_match_deep_dive
+),
 features_match_null_keys AS (
   SELECT COUNT(*) AS row_count
   FROM tf2.default.features_player_match
@@ -56,6 +60,33 @@ serving_map_null_keys AS (
   SELECT COUNT(*) AS row_count
   FROM tf2.default.serving_map_overview_daily
   WHERE map IS NULL OR match_date IS NULL
+),
+serving_player_match_deep_dive_null_keys AS (
+  SELECT COUNT(*) AS row_count
+  FROM tf2.default.serving_player_match_deep_dive
+  WHERE steamid IS NULL OR logid IS NULL OR match_date IS NULL
+),
+serving_player_match_deep_dive_duplicate_keys AS (
+  SELECT COUNT(*) AS row_count
+  FROM (
+    SELECT
+      logid,
+      steamid,
+      COUNT(*) AS duplicate_count
+    FROM tf2.default.serving_player_match_deep_dive
+    GROUP BY logid, steamid
+    HAVING COUNT(*) > 1
+  ) duplicates
+),
+serving_ml_model_registry_null_keys AS (
+  SELECT COUNT(*) AS row_count
+  FROM tf2.default.serving_ml_model_registry
+  WHERE model_name IS NULL OR model_version IS NULL
+),
+serving_ml_pipeline_progress_null_keys AS (
+  SELECT COUNT(*) AS row_count
+  FROM tf2.default.serving_ml_pipeline_progress_daily
+  WHERE progress_date IS NULL
 ),
 checks AS (
   SELECT
@@ -109,6 +140,16 @@ checks AS (
   UNION ALL
 
   SELECT
+    'serving_player_match_deep_dive_non_empty',
+    CASE WHEN row_count > 0 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(row_count AS DOUBLE),
+    '> 0 rows',
+    'player match deep-dive serving table must contain rows'
+  FROM serving_player_match_deep_dive
+
+  UNION ALL
+
+  SELECT
     'features_player_match_null_keys',
     CASE WHEN row_count = 0 THEN 'PASS' ELSE 'FAIL' END,
     CAST(row_count AS DOUBLE),
@@ -155,6 +196,46 @@ checks AS (
     '= 0 rows',
     'serving map rows must have map and match_date'
   FROM serving_map_null_keys
+
+  UNION ALL
+
+  SELECT
+    'serving_player_match_deep_dive_null_keys',
+    CASE WHEN row_count = 0 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(row_count AS DOUBLE),
+    '= 0 rows',
+    'deep-dive serving rows must have logid, steamid, and match_date'
+  FROM serving_player_match_deep_dive_null_keys
+
+  UNION ALL
+
+  SELECT
+    'serving_player_match_deep_dive_duplicate_keys',
+    CASE WHEN row_count = 0 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(row_count AS DOUBLE),
+    '= 0 rows',
+    'deep-dive serving table must have one row per (logid, steamid)'
+  FROM serving_player_match_deep_dive_duplicate_keys
+
+  UNION ALL
+
+  SELECT
+    'serving_ml_model_registry_null_keys',
+    CASE WHEN row_count = 0 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(row_count AS DOUBLE),
+    '= 0 rows',
+    'ml model registry serving rows must have model identifiers'
+  FROM serving_ml_model_registry_null_keys
+
+  UNION ALL
+
+  SELECT
+    'serving_ml_pipeline_progress_null_keys',
+    CASE WHEN row_count = 0 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(row_count AS DOUBLE),
+    '= 0 rows',
+    'ml pipeline progress rows must have progress_date'
+  FROM serving_ml_pipeline_progress_null_keys
 )
 SELECT
   check_name,

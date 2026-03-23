@@ -6,15 +6,71 @@ WITH (
   format = 'PARQUET',
   partitioning = ARRAY['month(match_date)']
 ) AS
-WITH team_totals AS (
+WITH logs_by_record AS (
+  SELECT *
+  FROM (
+    SELECT
+      l.*,
+      ROW_NUMBER() OVER (PARTITION BY l.recordid ORDER BY l.__ingest_ts DESC) AS rn
+    FROM tf2.default.logs l
+  ) ranked
+  WHERE rn = 1
+),
+logs_base AS (
+  SELECT *
+  FROM (
+    SELECT
+      l.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY l.logid
+        ORDER BY l.__ingest_ts DESC, l.sourcedateepochseconds DESC
+      ) AS rn_log
+    FROM logs_by_record l
+  ) ranked
+  WHERE rn_log = 1
+),
+summaries_by_record AS (
+  SELECT *
+  FROM (
+    SELECT
+      s.*,
+      ROW_NUMBER() OVER (PARTITION BY s.recordid ORDER BY s.__ingest_ts DESC) AS rn
+    FROM tf2.default.summaries s
+  ) ranked
+  WHERE rn = 1
+),
+summaries_base AS (
+  SELECT *
+  FROM (
+    SELECT
+      s.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY s.logid, s.steamid
+        ORDER BY s.__ingest_ts DESC, s.sourcedateepochseconds DESC
+      ) AS rn_player
+    FROM summaries_by_record s
+    WHERE s.team IN ('Red', 'Blue')
+  ) ranked
+  WHERE rn_player = 1
+),
+messages_base AS (
+  SELECT *
+  FROM (
+    SELECT
+      m.*,
+      ROW_NUMBER() OVER (PARTITION BY m.recordid ORDER BY m.__ingest_ts DESC) AS rn
+    FROM tf2.default.messages m
+  ) ranked
+  WHERE rn = 1
+),
+team_totals AS (
   SELECT
     logid,
     team,
     SUM(COALESCE(kills, 0)) AS team_kills,
     SUM(COALESCE(damagedealt, 0)) AS team_damage,
     SUM(COALESCE(healingdone, 0)) AS team_healing
-  FROM tf2.default.summaries
-  WHERE team IN ('Red', 'Blue')
+  FROM summaries_base
   GROUP BY logid, team
 ),
 chat_by_player_game AS (
@@ -29,12 +85,12 @@ chat_by_player_game AS (
       CASE
         WHEN REGEXP_LIKE(
           messagelower,
-          '\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\b'
+          '\\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\\b'
         ) THEN 1
         ELSE 0
       END
     ) AS negative_lexicon_hits
-  FROM tf2.default.messages
+  FROM messages_base
   WHERE steamid IS NOT NULL
   GROUP BY steamid, logid
 )
@@ -95,41 +151,121 @@ SELECT
     WHEN COALESCE(s.deaths, 0) >= 20 AND COALESCE(cbpg.negative_lexicon_hits, 0) >= 2 THEN 1
     ELSE 0
   END AS possible_tilt_label
-FROM tf2.default.summaries s
-LEFT JOIN tf2.default.logs l ON l.logid = s.logid
+FROM summaries_base s
+LEFT JOIN logs_base l ON l.logid = s.logid
 LEFT JOIN team_totals tt
   ON tt.logid = s.logid
  AND tt.team = s.team
 LEFT JOIN chat_by_player_game cbpg
   ON cbpg.logid = s.logid
- AND cbpg.steamid = s.steamid
-WHERE s.team IN ('Red', 'Blue');
+ AND cbpg.steamid = s.steamid;
 
 DELETE FROM tf2.default.features_player_match
 WHERE logid IN (
+  WITH summaries_by_record AS (
+    SELECT *
+    FROM (
+      SELECT
+        s.*,
+        ROW_NUMBER() OVER (PARTITION BY s.recordid ORDER BY s.__ingest_ts DESC) AS rn
+      FROM tf2.default.summaries s
+    ) ranked
+    WHERE rn = 1
+  ),
+  summaries_base AS (
+    SELECT *
+    FROM (
+      SELECT
+        s.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY s.logid, s.steamid
+          ORDER BY s.__ingest_ts DESC, s.sourcedateepochseconds DESC
+        ) AS rn_player
+      FROM summaries_by_record s
+      WHERE s.team IN ('Red', 'Blue')
+    ) ranked
+    WHERE rn_player = 1
+  )
   SELECT DISTINCT s.logid
-  FROM tf2.default.summaries s
+  FROM summaries_base s
   CROSS JOIN (
     SELECT COALESCE(
       DATE_ADD('day', -7, MAX(CAST(from_iso8601_timestamp(sourcedateiso) AS DATE))),
       DATE '1970-01-01'
     ) AS refresh_start_date
-    FROM tf2.default.summaries
+    FROM summaries_base
   ) b
   WHERE CAST(from_iso8601_timestamp(s.sourcedateiso) AS DATE) >= b.refresh_start_date
 );
 
 INSERT INTO tf2.default.features_player_match
-WITH bounds AS (
+WITH logs_by_record AS (
+  SELECT *
+  FROM (
+    SELECT
+      l.*,
+      ROW_NUMBER() OVER (PARTITION BY l.recordid ORDER BY l.__ingest_ts DESC) AS rn
+    FROM tf2.default.logs l
+  ) ranked
+  WHERE rn = 1
+),
+logs_base AS (
+  SELECT *
+  FROM (
+    SELECT
+      l.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY l.logid
+        ORDER BY l.__ingest_ts DESC, l.sourcedateepochseconds DESC
+      ) AS rn_log
+    FROM logs_by_record l
+  ) ranked
+  WHERE rn_log = 1
+),
+summaries_by_record AS (
+  SELECT *
+  FROM (
+    SELECT
+      s.*,
+      ROW_NUMBER() OVER (PARTITION BY s.recordid ORDER BY s.__ingest_ts DESC) AS rn
+    FROM tf2.default.summaries s
+  ) ranked
+  WHERE rn = 1
+),
+summaries_base AS (
+  SELECT *
+  FROM (
+    SELECT
+      s.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY s.logid, s.steamid
+        ORDER BY s.__ingest_ts DESC, s.sourcedateepochseconds DESC
+      ) AS rn_player
+    FROM summaries_by_record s
+    WHERE s.team IN ('Red', 'Blue')
+  ) ranked
+  WHERE rn_player = 1
+),
+messages_base AS (
+  SELECT *
+  FROM (
+    SELECT
+      m.*,
+      ROW_NUMBER() OVER (PARTITION BY m.recordid ORDER BY m.__ingest_ts DESC) AS rn
+    FROM tf2.default.messages m
+  ) ranked
+  WHERE rn = 1
+),
+bounds AS (
   SELECT COALESCE(
     DATE_ADD('day', -7, MAX(CAST(from_iso8601_timestamp(sourcedateiso) AS DATE))),
     DATE '1970-01-01'
   ) AS refresh_start_date
-  FROM tf2.default.summaries
+  FROM summaries_base
 ),
 changed_logs AS (
   SELECT DISTINCT s.logid
-  FROM tf2.default.summaries s
+  FROM summaries_base s
   CROSS JOIN bounds b
   WHERE CAST(from_iso8601_timestamp(s.sourcedateiso) AS DATE) >= b.refresh_start_date
 ),
@@ -140,9 +276,8 @@ team_totals AS (
     SUM(COALESCE(s.kills, 0)) AS team_kills,
     SUM(COALESCE(s.damagedealt, 0)) AS team_damage,
     SUM(COALESCE(s.healingdone, 0)) AS team_healing
-  FROM tf2.default.summaries s
+  FROM summaries_base s
   JOIN changed_logs cl ON cl.logid = s.logid
-  WHERE s.team IN ('Red', 'Blue')
   GROUP BY s.logid, s.team
 ),
 chat_by_player_game AS (
@@ -157,12 +292,12 @@ chat_by_player_game AS (
       CASE
         WHEN REGEXP_LIKE(
           m.messagelower,
-          '\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\b'
+          '\\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\\b'
         ) THEN 1
         ELSE 0
       END
     ) AS negative_lexicon_hits
-  FROM tf2.default.messages m
+  FROM messages_base m
   JOIN changed_logs cl ON cl.logid = m.logid
   WHERE m.steamid IS NOT NULL
   GROUP BY m.steamid, m.logid
@@ -224,13 +359,12 @@ SELECT
     WHEN COALESCE(s.deaths, 0) >= 20 AND COALESCE(cbpg.negative_lexicon_hits, 0) >= 2 THEN 1
     ELSE 0
   END AS possible_tilt_label
-FROM tf2.default.summaries s
+FROM summaries_base s
 JOIN changed_logs cl ON cl.logid = s.logid
-LEFT JOIN tf2.default.logs l ON l.logid = s.logid
+LEFT JOIN logs_base l ON l.logid = s.logid
 LEFT JOIN team_totals tt
   ON tt.logid = s.logid
  AND tt.team = s.team
 LEFT JOIN chat_by_player_game cbpg
   ON cbpg.logid = s.logid
- AND cbpg.steamid = s.steamid
-WHERE s.team IN ('Red', 'Blue');
+ AND cbpg.steamid = s.steamid;

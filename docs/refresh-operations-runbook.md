@@ -31,8 +31,8 @@ Optional environment overrides:
 
 ## Mode selection
 
-- `incremental` (default): rewrites a rolling 7-day window in `features_player_match` and `serving_map_overview_daily`, then recomputes full history for changed players in `features_player_recent_form` and `serving_player_profiles`.
-- `full`: drops and rebuilds serving/feature tables from full core history using scripts `11` to `14`.
+- `incremental` (default): rewrites a rolling 7-day window in `features_player_match`, `serving_map_overview_daily`, and `serving_player_match_deep_dive`; recomputes full history for changed players in `features_player_recent_form` and `serving_player_profiles`; refreshes ML serving progress tables.
+- `full`: drops and rebuilds feature/serving tables from full core history using scripts `11` to `14`, `27`, and `29` (plus model registry table guard from `26`).
 
 Use `full` for first-time setup, backfills, and schema-repair events.
 Use `incremental` for routine daily refreshes.

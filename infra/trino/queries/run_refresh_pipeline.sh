@@ -243,6 +243,15 @@ main() {
     if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "build_serving_map_overview_daily" "$QUERIES_DIR/14_build_serving_map_overview_daily.sql" "SELECT COUNT(*) FROM tf2.default.serving_map_overview_daily"; then
       pipeline_error="build_serving_map_overview_daily failed"
     fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "build_serving_player_match_deep_dive" "$QUERIES_DIR/27_build_serving_player_match_deep_dive.sql" "SELECT COUNT(*) FROM tf2.default.serving_player_match_deep_dive"; then
+      pipeline_error="build_serving_player_match_deep_dive failed"
+    fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "ensure_ml_model_registry_tables" "$QUERIES_DIR/26_model_registry_tables.sql" "SELECT COUNT(*) FROM tf2.default.ml_model_registry"; then
+      pipeline_error="ensure_ml_model_registry_tables failed"
+    fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "build_serving_ml_progress" "$QUERIES_DIR/29_build_serving_ml_progress.sql" "SELECT COUNT(*) FROM tf2.default.serving_ml_pipeline_progress_daily"; then
+      pipeline_error="build_serving_ml_progress failed"
+    fi
   else
     if ! run_step_file "incremental_features_player_match" "$QUERIES_DIR/15_incremental_refresh_features_player_match.sql" "SELECT COUNT(*) FROM tf2.default.features_player_match"; then
       pipeline_error="incremental_features_player_match failed"
@@ -255,6 +264,15 @@ main() {
     fi
     if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "incremental_serving_map_overview_daily" "$QUERIES_DIR/18_incremental_refresh_serving_map_overview_daily.sql" "SELECT COUNT(*) FROM tf2.default.serving_map_overview_daily"; then
       pipeline_error="incremental_serving_map_overview_daily failed"
+    fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "incremental_serving_player_match_deep_dive" "$QUERIES_DIR/28_incremental_refresh_serving_player_match_deep_dive.sql" "SELECT COUNT(*) FROM tf2.default.serving_player_match_deep_dive"; then
+      pipeline_error="incremental_serving_player_match_deep_dive failed"
+    fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "ensure_ml_model_registry_tables" "$QUERIES_DIR/26_model_registry_tables.sql" "SELECT COUNT(*) FROM tf2.default.ml_model_registry"; then
+      pipeline_error="ensure_ml_model_registry_tables failed"
+    fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "incremental_serving_ml_progress" "$QUERIES_DIR/30_incremental_refresh_serving_ml_progress.sql" "SELECT COUNT(*) FROM tf2.default.serving_ml_pipeline_progress_daily"; then
+      pipeline_error="incremental_serving_ml_progress failed"
     fi
   fi
 

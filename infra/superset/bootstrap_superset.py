@@ -27,18 +27,25 @@ DATABASE_NAME = "TF2 Trino"
 DATASETS = (
   "serving_player_profiles",
   "serving_map_overview_daily",
+  "serving_player_match_deep_dive",
+  "serving_ml_model_registry",
+  "serving_ml_pipeline_progress_daily",
 )
 
 DASHBOARDS = (
   "TF2 Player Profile and Momentum",
   "TF2 Map Competitiveness and Pace",
   "TF2 Chat Behaviour and Tilt Risk",
+  "TF2 Player Match Deep Dive",
+  "TF2 ML Progress and Registry",
 )
 
 SAVED_QUERY_FILES = (
   ("Player Profile and Momentum", "21_dashboard_player_profile_and_momentum.sql"),
   ("Map Competitiveness and Pace", "22_dashboard_map_competitiveness_and_pace.sql"),
   ("Chat Behaviour and Tilt Risk", "23_dashboard_chat_behaviour_and_tilt_risk.sql"),
+  ("Player Match Deep Dive", "31_dashboard_player_match_deep_dive.sql"),
+  ("ML Progress and Registry", "32_dashboard_ml_progress_and_registry.sql"),
 )
 
 DASHBOARD_CHART_SPECS = {
@@ -390,6 +397,356 @@ DASHBOARD_CHART_SPECS = {
               "games",
               "avg_negative_chat_ratio",
               "tilt_signal_rate",
+            ],
+            "row_limit": 300,
+          },
+        },
+      ],
+    },
+  ],
+  "TF2 Player Match Deep Dive": [
+    {
+      "slice_name": "Player Match Deep-Dive Snapshot",
+      "dataset": "serving_player_match_deep_dive",
+      "layout_width": 12,
+      "layout_height": 56,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "match_date",
+              "steamid",
+              "logid",
+              "map",
+              "won_game",
+              "kills",
+              "damage_dealt",
+              "impact_index",
+              "kda_ratio",
+              "negative_chat_ratio",
+              "momentum_label",
+              "behaviour_risk_tier",
+              "impact_tier",
+            ],
+            "row_limit": 250,
+          },
+        }
+      ],
+    },
+    {
+      "slice_name": "Player Match Impact Trend",
+      "dataset": "serving_player_match_deep_dive",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "echarts_timeseries_line",
+          "form_data": {
+            "query_mode": "aggregate",
+            "granularity_sqla": "match_date",
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "since": "120 days ago",
+            "until": "now",
+            "groupby": [],
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(impact_index)",
+                "label": "Avg Impact Index",
+                "hasCustomLabel": True,
+              },
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(negative_chat_ratio)",
+                "label": "Avg Negative Chat Ratio",
+                "hasCustomLabel": True,
+              },
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "show_legend": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "match_date",
+              "steamid",
+              "map",
+              "impact_index",
+              "negative_chat_ratio",
+              "won_game",
+            ],
+            "row_limit": 400,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "Behaviour Risk Split",
+      "dataset": "serving_player_match_deep_dive",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "pie",
+          "form_data": {
+            "query_mode": "aggregate",
+            "groupby": ["behaviour_risk_tier"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "COUNT(*)",
+              "label": "Matches",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "COUNT(*)",
+                "label": "Matches",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "sort_by_metric": True,
+          },
+        },
+        {
+          "viz_type": "dist_bar",
+          "form_data": {
+            "query_mode": "aggregate",
+            "groupby": ["behaviour_risk_tier"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "COUNT(*)",
+              "label": "Matches",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "COUNT(*)",
+                "label": "Matches",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "sort_by_metric": True,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "Impact Tier Distribution",
+      "dataset": "serving_player_match_deep_dive",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "pie",
+          "form_data": {
+            "query_mode": "aggregate",
+            "groupby": ["impact_tier"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "COUNT(*)",
+              "label": "Matches",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "COUNT(*)",
+                "label": "Matches",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "sort_by_metric": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": ["impact_tier", "steamid", "logid", "match_date", "impact_index"],
+            "row_limit": 300,
+          },
+        },
+      ],
+    },
+  ],
+  "TF2 ML Progress and Registry": [
+    {
+      "slice_name": "ML Pipeline Progress Daily",
+      "dataset": "serving_ml_pipeline_progress_daily",
+      "layout_width": 12,
+      "layout_height": 56,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "progress_date",
+              "pipeline_success_runs",
+              "pipeline_failed_runs",
+              "avg_pipeline_duration_seconds",
+              "latest_pipeline_status",
+              "snapshots_created",
+              "training_rows_materialised",
+              "latest_snapshot_id",
+              "models_registered",
+              "promotions_to_production",
+              "active_production_models",
+            ],
+            "row_limit": 200,
+          },
+        }
+      ],
+    },
+    {
+      "slice_name": "ML Activity Trend",
+      "dataset": "serving_ml_pipeline_progress_daily",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "echarts_timeseries_line",
+          "form_data": {
+            "query_mode": "aggregate",
+            "granularity_sqla": "progress_date",
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "since": "180 days ago",
+            "until": "now",
+            "groupby": [],
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "SUM(snapshots_created)",
+                "label": "Snapshots Created",
+                "hasCustomLabel": True,
+              },
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "SUM(models_registered)",
+                "label": "Models Registered",
+                "hasCustomLabel": True,
+              },
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "SUM(promotions_to_production)",
+                "label": "Promotions to Production",
+                "hasCustomLabel": True,
+              },
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "show_legend": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "progress_date",
+              "snapshots_created",
+              "models_registered",
+              "promotions_to_production",
+              "active_production_models",
+            ],
+            "row_limit": 300,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "Model Stage Distribution",
+      "dataset": "serving_ml_model_registry",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "pie",
+          "form_data": {
+            "query_mode": "aggregate",
+            "groupby": ["stage"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "COUNT(*)",
+              "label": "Model Versions",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "COUNT(*)",
+                "label": "Model Versions",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "sort_by_metric": True,
+          },
+        },
+        {
+          "viz_type": "dist_bar",
+          "form_data": {
+            "query_mode": "aggregate",
+            "groupby": ["stage"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "COUNT(*)",
+              "label": "Model Versions",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "COUNT(*)",
+                "label": "Model Versions",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "sort_by_metric": True,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "ML Model Registry Versions",
+      "dataset": "serving_ml_model_registry",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "model_name",
+              "model_version",
+              "task_type",
+              "stage",
+              "is_active",
+              "snapshot_id",
+              "primary_metric_name",
+              "primary_metric_value",
+              "model_age_days",
+              "data_age_days",
             ],
             "row_limit": 300,
           },

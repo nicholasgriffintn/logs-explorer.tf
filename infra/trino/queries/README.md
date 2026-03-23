@@ -43,6 +43,12 @@ SHOW TABLES FROM tf2.default;
 - `24_serving_query_performance_benchmark.sql`: benchmark pack (`EXPLAIN ANALYZE`) for serving query latency checks
 - `25_build_ml_training_snapshot.sql`: materialise snapshot metadata + snapshot-scoped ML training dataset
 - `26_model_registry_tables.sql`: create lightweight model registry + stage history tables
+- `27_build_serving_player_match_deep_dive.sql`: build match-level deep-dive serving table for detailed player analysis
+- `28_incremental_refresh_serving_player_match_deep_dive.sql`: incremental refresh for deep-dive player-match serving rows
+- `29_build_serving_ml_progress.sql`: build ML progress serving tables (daily progress + model registry enrichment)
+- `30_incremental_refresh_serving_ml_progress.sql`: refresh ML progress serving tables for incremental runs
+- `31_dashboard_player_match_deep_dive.sql`: dashboard slice for deep player map/match analysis
+- `32_dashboard_ml_progress_and_registry.sql`: dashboard slices for ML pipeline progress and model registry status
 - `run_training_snapshot.sh`: one command runner for snapshot materialisation
 - `run_refresh_pipeline.sh`: one command runner for full/incremental refresh + quality checks
 
@@ -61,6 +67,9 @@ docker exec -i tf2-trino trino < infra/trino/queries/11_build_features_player_ma
 docker exec -i tf2-trino trino < infra/trino/queries/12_build_features_player_recent_form.sql
 docker exec -i tf2-trino trino < infra/trino/queries/13_build_serving_player_profiles.sql
 docker exec -i tf2-trino trino < infra/trino/queries/14_build_serving_map_overview_daily.sql
+docker exec -i tf2-trino trino < infra/trino/queries/27_build_serving_player_match_deep_dive.sql
+docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
+docker exec -i tf2-trino trino < infra/trino/queries/29_build_serving_ml_progress.sql
 ```
 
 ## Incremental processing flow
@@ -72,6 +81,9 @@ docker exec -i tf2-trino trino < infra/trino/queries/15_incremental_refresh_feat
 docker exec -i tf2-trino trino < infra/trino/queries/16_incremental_refresh_features_player_recent_form.sql
 docker exec -i tf2-trino trino < infra/trino/queries/17_incremental_refresh_serving_player_profiles.sql
 docker exec -i tf2-trino trino < infra/trino/queries/18_incremental_refresh_serving_map_overview_daily.sql
+docker exec -i tf2-trino trino < infra/trino/queries/28_incremental_refresh_serving_player_match_deep_dive.sql
+docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
+docker exec -i tf2-trino trino < infra/trino/queries/30_incremental_refresh_serving_ml_progress.sql
 docker exec -i tf2-trino trino < infra/trino/queries/19_data_quality_checks.sql
 ```
 
@@ -99,6 +111,8 @@ Use these `serving_*`-only queries for initial dashboard tiles:
 docker exec -i tf2-trino trino < infra/trino/queries/21_dashboard_player_profile_and_momentum.sql
 docker exec -i tf2-trino trino < infra/trino/queries/22_dashboard_map_competitiveness_and_pace.sql
 docker exec -i tf2-trino trino < infra/trino/queries/23_dashboard_chat_behaviour_and_tilt_risk.sql
+docker exec -i tf2-trino trino < infra/trino/queries/31_dashboard_player_match_deep_dive.sql
+docker exec -i tf2-trino trino < infra/trino/queries/32_dashboard_ml_progress_and_registry.sql
 ```
 
 Set query parameters in each file's `params` CTE before running.
@@ -127,4 +141,10 @@ Create model registry tables:
 
 ```bash
 docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
+```
+
+Build ML progress serving tables:
+
+```bash
+docker exec -i tf2-trino trino < infra/trino/queries/29_build_serving_ml_progress.sql
 ```
