@@ -237,6 +237,9 @@ main() {
     if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "build_features_player_recent_form" "$QUERIES_DIR/12_build_features_player_recent_form.sql" "SELECT COUNT(*) FROM tf2.default.features_player_recent_form"; then
       pipeline_error="build_features_player_recent_form failed"
     fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "build_ml_training_snapshot" "$QUERIES_DIR/25_build_ml_training_snapshot.sql" "SELECT COUNT(*) FROM tf2.default.ml_training_dataset_snapshots"; then
+      pipeline_error="build_ml_training_snapshot failed"
+    fi
     if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "build_serving_player_profiles" "$QUERIES_DIR/13_build_serving_player_profiles.sql" "SELECT COUNT(*) FROM tf2.default.serving_player_profiles"; then
       pipeline_error="build_serving_player_profiles failed"
     fi
@@ -258,6 +261,9 @@ main() {
     fi
     if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "incremental_features_player_recent_form" "$QUERIES_DIR/16_incremental_refresh_features_player_recent_form.sql" "SELECT COUNT(*) FROM tf2.default.features_player_recent_form"; then
       pipeline_error="incremental_features_player_recent_form failed"
+    fi
+    if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "build_ml_training_snapshot" "$QUERIES_DIR/25_build_ml_training_snapshot.sql" "SELECT COUNT(*) FROM tf2.default.ml_training_dataset_snapshots"; then
+      pipeline_error="build_ml_training_snapshot failed"
     fi
     if [[ "$PIPELINE_STATUS" == "success" ]] && ! run_step_file "incremental_serving_player_profiles" "$QUERIES_DIR/17_incremental_refresh_serving_player_profiles.sql" "SELECT COUNT(*) FROM tf2.default.serving_player_profiles"; then
       pipeline_error="incremental_serving_player_profiles failed"

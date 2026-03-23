@@ -31,8 +31,8 @@ Optional environment overrides:
 
 ## Mode selection
 
-- `incremental` (default): rewrites a rolling 7-day window in `features_player_match`, `serving_map_overview_daily`, and `serving_player_match_deep_dive`; recomputes full history for changed players in `features_player_recent_form` and `serving_player_profiles`; refreshes ML serving progress tables.
-- `full`: drops and rebuilds feature/serving tables from full core history using scripts `11` to `14`, `27`, and `29` (plus model registry table guard from `26`).
+- `incremental` (default): rewrites a rolling 7-day window in `features_player_match`, `serving_map_overview_daily`, and `serving_player_match_deep_dive`; recomputes full history for changed players in `features_player_recent_form` and `serving_player_profiles`; materialises the latest training snapshot (`25`); refreshes ML serving progress tables.
+- `full`: drops and rebuilds feature/serving tables from full core history using scripts `11` to `14`, `25`, `27`, and `29` (plus model registry table guard from `26`).
 
 Use `full` for first-time setup, backfills, and schema-repair events.
 Use `incremental` for routine daily refreshes.
@@ -41,6 +41,12 @@ Use `incremental` for routine daily refreshes.
 
 The runner executes `19_data_quality_checks.sql` after refresh.
 If any check returns `FAIL`, the runner exits non-zero and records failure metadata.
+
+For ML-specific readiness checks, run:
+
+```bash
+infra/trino/queries/run_ml_readiness_check.sh
+```
 
 ## Run metadata
 

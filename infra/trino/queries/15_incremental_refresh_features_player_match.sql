@@ -84,8 +84,8 @@ chat_by_player_game AS (
     SUM(
       CASE
         WHEN REGEXP_LIKE(
-          messagelower,
-          '\\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\\b'
+          LOWER(message),
+          '(^|[^a-z0-9])(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)([^a-z0-9]|$)'
         ) THEN 1
         ELSE 0
       END
@@ -148,7 +148,9 @@ SELECT
     ELSE CAST(COALESCE(cbpg.negative_lexicon_hits, 0) AS DOUBLE) / cbpg.chat_messages
   END AS negative_chat_ratio,
   CASE
-    WHEN COALESCE(s.deaths, 0) >= 20 AND COALESCE(cbpg.negative_lexicon_hits, 0) >= 2 THEN 1
+    WHEN COALESCE(s.deaths, 0) >= 12
+      AND COALESCE(cbpg.chat_messages, 0) >= 2
+      AND COALESCE(cbpg.negative_lexicon_hits, 0) >= 1 THEN 1
     ELSE 0
   END AS possible_tilt_label
 FROM summaries_base s
@@ -291,8 +293,8 @@ chat_by_player_game AS (
     SUM(
       CASE
         WHEN REGEXP_LIKE(
-          m.messagelower,
-          '\\b(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)\\b'
+          LOWER(m.message),
+          '(^|[^a-z0-9])(noob|trash|idiot|stupid|cheat|cheater|ez|wtf|losing|throw|threw|report)([^a-z0-9]|$)'
         ) THEN 1
         ELSE 0
       END
@@ -356,7 +358,9 @@ SELECT
     ELSE CAST(COALESCE(cbpg.negative_lexicon_hits, 0) AS DOUBLE) / cbpg.chat_messages
   END AS negative_chat_ratio,
   CASE
-    WHEN COALESCE(s.deaths, 0) >= 20 AND COALESCE(cbpg.negative_lexicon_hits, 0) >= 2 THEN 1
+    WHEN COALESCE(s.deaths, 0) >= 12
+      AND COALESCE(cbpg.chat_messages, 0) >= 2
+      AND COALESCE(cbpg.negative_lexicon_hits, 0) >= 1 THEN 1
     ELSE 0
   END AS possible_tilt_label
 FROM summaries_base s

@@ -49,6 +49,8 @@ SHOW TABLES FROM tf2.default;
 - `30_incremental_refresh_serving_ml_progress.sql`: refresh ML progress serving tables for incremental runs
 - `31_dashboard_player_match_deep_dive.sql`: dashboard slice for deep player map/match analysis
 - `32_dashboard_ml_progress_and_registry.sql`: dashboard slices for ML pipeline progress and model registry status
+- `33_ml_data_readiness_check.sql`: ML data quality/readiness checks for feature completeness and label health
+- `run_ml_readiness_check.sh`: one command runner for ML data readiness checks
 - `run_training_snapshot.sh`: one command runner for snapshot materialisation
 - `run_refresh_pipeline.sh`: one command runner for full/incremental refresh + quality checks
 
@@ -65,6 +67,7 @@ If you want to rebuild `features` and `serving` from full core history, run:
 ```bash
 docker exec -i tf2-trino trino < infra/trino/queries/11_build_features_player_match.sql
 docker exec -i tf2-trino trino < infra/trino/queries/12_build_features_player_recent_form.sql
+docker exec -i tf2-trino trino < infra/trino/queries/25_build_ml_training_snapshot.sql
 docker exec -i tf2-trino trino < infra/trino/queries/13_build_serving_player_profiles.sql
 docker exec -i tf2-trino trino < infra/trino/queries/14_build_serving_map_overview_daily.sql
 docker exec -i tf2-trino trino < infra/trino/queries/27_build_serving_player_match_deep_dive.sql
@@ -79,6 +82,7 @@ If you want to refresh only changed windows/players, run:
 ```bash
 docker exec -i tf2-trino trino < infra/trino/queries/15_incremental_refresh_features_player_match.sql
 docker exec -i tf2-trino trino < infra/trino/queries/16_incremental_refresh_features_player_recent_form.sql
+docker exec -i tf2-trino trino < infra/trino/queries/25_build_ml_training_snapshot.sql
 docker exec -i tf2-trino trino < infra/trino/queries/17_incremental_refresh_serving_player_profiles.sql
 docker exec -i tf2-trino trino < infra/trino/queries/18_incremental_refresh_serving_map_overview_daily.sql
 docker exec -i tf2-trino trino < infra/trino/queries/28_incremental_refresh_serving_player_match_deep_dive.sql
@@ -147,4 +151,10 @@ Build ML progress serving tables:
 
 ```bash
 docker exec -i tf2-trino trino < infra/trino/queries/29_build_serving_ml_progress.sql
+```
+
+Run ML data readiness checks:
+
+```bash
+infra/trino/queries/run_ml_readiness_check.sh
 ```

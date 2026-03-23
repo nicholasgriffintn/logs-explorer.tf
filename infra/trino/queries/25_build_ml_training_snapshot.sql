@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS tf2.default.ml_training_player_match (
   match_date DATE,
   map VARCHAR,
   team VARCHAR,
+  team_score BIGINT,
+  opponent_score BIGINT,
+  score_delta BIGINT,
   duration_seconds BIGINT,
   kills BIGINT,
   assists BIGINT,
@@ -51,6 +54,9 @@ CREATE TABLE IF NOT EXISTS tf2.default.ml_training_player_match (
   rolling_10_kda_ratio DOUBLE,
   rolling_10_win_rate DOUBLE,
   rolling_10_negative_chat_ratio DOUBLE,
+  career_avg_kills DOUBLE,
+  career_avg_damage DOUBLE,
+  career_avg_impact DOUBLE,
   form_delta_kills DOUBLE,
   form_delta_damage DOUBLE,
   form_delta_impact DOUBLE,
@@ -114,6 +120,9 @@ INSERT INTO tf2.default.ml_training_player_match (
   match_date,
   map,
   team,
+  team_score,
+  opponent_score,
+  score_delta,
   duration_seconds,
   kills,
   assists,
@@ -140,6 +149,9 @@ INSERT INTO tf2.default.ml_training_player_match (
   rolling_10_kda_ratio,
   rolling_10_win_rate,
   rolling_10_negative_chat_ratio,
+  career_avg_kills,
+  career_avg_damage,
+  career_avg_impact,
   form_delta_kills,
   form_delta_damage,
   form_delta_impact,
@@ -154,6 +166,29 @@ WITH snapshot_candidate AS (
   SELECT
     CONCAT('train_', CAST(CAST(to_unixtime(MAX(match_time)) AS BIGINT) AS VARCHAR)) AS snapshot_id
   FROM tf2.default.features_player_match
+),
+logs_by_record AS (
+  SELECT *
+  FROM (
+    SELECT
+      l.*,
+      ROW_NUMBER() OVER (PARTITION BY l.recordid ORDER BY l.__ingest_ts DESC) AS rn
+    FROM tf2.default.logs l
+  ) ranked
+  WHERE rn = 1
+),
+logs_base AS (
+  SELECT *
+  FROM (
+    SELECT
+      l.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY l.logid
+        ORDER BY l.__ingest_ts DESC, l.sourcedateepochseconds DESC
+      ) AS rn_log
+    FROM logs_by_record l
+  ) ranked
+  WHERE rn_log = 1
 ),
 selected_snapshot AS (
   SELECT
@@ -180,6 +215,27 @@ training_rows AS (
     fpm.match_date,
     fpm.map,
     fpm.team,
+    CAST(
+      CASE
+        WHEN fpm.team = 'Red' THEN COALESCE(lb.redscore, 0)
+        WHEN fpm.team = 'Blue' THEN COALESCE(lb.bluescore, 0)
+        ELSE 0
+      END AS BIGINT
+    ) AS team_score,
+    CAST(
+      CASE
+        WHEN fpm.team = 'Red' THEN COALESCE(lb.bluescore, 0)
+        WHEN fpm.team = 'Blue' THEN COALESCE(lb.redscore, 0)
+        ELSE 0
+      END AS BIGINT
+    ) AS opponent_score,
+    CAST(
+      CASE
+        WHEN fpm.team = 'Red' THEN COALESCE(lb.redscore, 0) - COALESCE(lb.bluescore, 0)
+        WHEN fpm.team = 'Blue' THEN COALESCE(lb.bluescore, 0) - COALESCE(lb.redscore, 0)
+        ELSE 0
+      END AS BIGINT
+    ) AS score_delta,
     CAST(fpm.duration_seconds AS BIGINT) AS duration_seconds,
     CAST(fpm.kills AS BIGINT) AS kills,
     CAST(fpm.assists AS BIGINT) AS assists,
@@ -206,6 +262,9 @@ training_rows AS (
     CAST(frf.rolling_10_kda_ratio AS DOUBLE) AS rolling_10_kda_ratio,
     CAST(frf.rolling_10_win_rate AS DOUBLE) AS rolling_10_win_rate,
     CAST(frf.rolling_10_negative_chat_ratio AS DOUBLE) AS rolling_10_negative_chat_ratio,
+    CAST(frf.career_avg_kills AS DOUBLE) AS career_avg_kills,
+    CAST(frf.career_avg_damage AS DOUBLE) AS career_avg_damage,
+    CAST(frf.career_avg_impact AS DOUBLE) AS career_avg_impact,
     CAST(frf.form_delta_kills AS DOUBLE) AS form_delta_kills,
     CAST(frf.form_delta_damage AS DOUBLE) AS form_delta_damage,
     CAST(frf.form_delta_impact AS DOUBLE) AS form_delta_impact,
@@ -220,6 +279,8 @@ training_rows AS (
   FROM tf2.default.features_player_match fpm
   JOIN selected_snapshot ss
     ON fpm.match_time <= ss.snapshot_cutoff_time
+  LEFT JOIN logs_base lb
+    ON lb.logid = fpm.logid
   LEFT JOIN tf2.default.features_player_recent_form frf
     ON frf.steamid = fpm.steamid
    AND frf.logid = fpm.logid
@@ -234,6 +295,9 @@ SELECT
   match_date,
   map,
   team,
+  team_score,
+  opponent_score,
+  score_delta,
   duration_seconds,
   kills,
   assists,
@@ -260,6 +324,9 @@ SELECT
   rolling_10_kda_ratio,
   rolling_10_win_rate,
   rolling_10_negative_chat_ratio,
+  career_avg_kills,
+  career_avg_damage,
+  career_avg_impact,
   form_delta_kills,
   form_delta_damage,
   form_delta_impact,

@@ -24,7 +24,7 @@ Label definition:
 
 Recommended features:
 
-- **Match context**: `map`, `team`, `duration_seconds`
+- **Match context**: `map`, `team`, `duration_seconds`, `team_score`, `opponent_score`, `score_delta`
 - **Player production**: `kills`, `assists`, `deaths`, `damage_dealt`, `healing_done`, `ubers_used`
 - **Relative contribution**: `kill_share_of_team`, `damage_share_of_team`, `healing_share_of_team`, `impact_index`
 - **Pace/efficiency**: `damage_per_minute`, `kda_ratio`
@@ -47,7 +47,7 @@ Label definition:
 Recommended features:
 
 - **Production and contribution**: `kills`, `assists`, `deaths`, `damage_dealt`, `healing_done`, `ubers_used`, `kill_share_of_team`, `damage_share_of_team`, `healing_share_of_team`
-- **Form trajectory**: `rolling_10_avg_impact`, `career_avg_impact`, `form_delta_impact`, `games_played_to_date`
+- **Form trajectory**: `rolling_10_avg_impact`, `career_avg_impact`, `career_avg_damage`, `career_avg_kills`, `form_delta_impact`, `games_played_to_date`
 - **Style context**: `classes_played_count`, `map`, `team`
 
 ## Model 3: toxicity/tilt classifier
@@ -64,7 +64,7 @@ Label definition:
 Recommended features:
 
 - **Chat intensity**: `chat_messages`, `avg_message_length`, `all_caps_messages`, `intense_punctuation_messages`, `negative_lexicon_hits`, `negative_chat_ratio`
-- **Gameplay stress proxies**: `deaths`, `won_game`, `score_delta` (join from logs if needed), `impact_index`
+- **Gameplay stress proxies**: `deaths`, `won_game`, `score_delta`, `impact_index`
 - **Behavioural history**: `rolling_10_negative_chat_ratio`, `rolling_10_win_rate`, `form_delta_impact`, `momentum_label`
 
 Class-balance guidance:
@@ -86,3 +86,11 @@ For each baseline model, publish:
 - ROC-AUC / PR-AUC where applicable
 - calibration plot notes (especially for win probability)
 - feature importance summary and known caveats
+
+## Readiness check before training
+
+Run this before snapshot materialisation and training:
+
+```bash
+infra/trino/queries/run_ml_readiness_check.sh
+```

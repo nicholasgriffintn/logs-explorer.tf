@@ -29,11 +29,21 @@ Then prints the latest snapshot metadata row.
 ## Data included in training rows
 
 - match-level gameplay, contribution, and chat features from `features_player_match`
+- score context features (`team_score`, `opponent_score`, `score_delta`) derived from `logs`
 - rolling-form context from `features_player_recent_form`
+- career form anchors (`career_avg_kills`, `career_avg_damage`, `career_avg_impact`)
 - labels:
   - `label_win` from `won_game`
   - `label_impact_percentile` via `NTILE(100)` by `match_date`
   - `label_tilt` from `possible_tilt_label`
+
+## Readiness gate
+
+Run data readiness checks before or alongside snapshots:
+
+```bash
+infra/trino/queries/run_ml_readiness_check.sh
+```
 
 ## Lineage minimum for model runs
 
