@@ -48,6 +48,18 @@ For ML-specific readiness checks, run:
 infra/trino/queries/run_ml_readiness_check.sh
 ```
 
+To run baseline training from the latest snapshot and register candidate versions:
+
+```bash
+MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+```
+
+The command builds and runs the containerised trainer and updates:
+
+- `artifacts/ml/...` model files
+- `docs/ml-offline-evaluation-report.md`
+- `tf2.default.ml_model_registry` candidate rows
+
 ## Run metadata
 
 The runner writes step-level and pipeline-level status rows to:

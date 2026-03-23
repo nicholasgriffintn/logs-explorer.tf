@@ -56,3 +56,16 @@ Record these fields with each training run:
 - evaluation metrics and calibration notes
 
 Do not train directly from live `features_*` tables in scheduled jobs.
+
+## Baseline training command
+
+Train baseline models from the latest snapshot and upsert candidate rows in `ml_model_registry`:
+
+```bash
+MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+```
+
+The training runner uses a dedicated Docker image and publishes:
+
+- model artefacts in `artifacts/ml/...`
+- an offline evaluation report in `docs/ml-offline-evaluation-report.md`

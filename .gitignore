@@ -32,3 +32,4 @@ dist-ssr
 infra/trino/catalog/tf2.properties
 
 __pycache__
+artifacts/

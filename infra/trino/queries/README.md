@@ -50,6 +50,7 @@ SHOW TABLES FROM tf2.default;
 - `31_dashboard_player_match_deep_dive.sql`: dashboard slice for deep player map/match analysis
 - `32_dashboard_ml_progress_and_registry.sql`: dashboard slices for ML pipeline progress and model registry status
 - `33_ml_data_readiness_check.sql`: ML data quality/readiness checks for feature completeness and label health
+- `run_ml_baseline_training.sh`: one command runner for baseline model training and registry upsert
 - `run_ml_readiness_check.sh`: one command runner for ML data readiness checks
 - `run_training_snapshot.sh`: one command runner for snapshot materialisation
 - `run_refresh_pipeline.sh`: one command runner for full/incremental refresh + quality checks
@@ -158,3 +159,15 @@ Run ML data readiness checks:
 ```bash
 infra/trino/queries/run_ml_readiness_check.sh
 ```
+
+Train baseline models and register candidate versions:
+
+```bash
+MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+```
+
+The runner builds and executes the dedicated ML trainer image from `infra/ml/Dockerfile`,
+then writes:
+
+- model artefacts under `artifacts/ml/...`
+- an offline report at `docs/ml-offline-evaluation-report.md`

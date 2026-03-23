@@ -16,6 +16,15 @@ Create them with:
 docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
 ```
 
+Baseline training can populate candidate rows directly:
+
+```bash
+MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+```
+
+This command runs training in a dedicated container image so dependency updates are
+managed in one place (`infra/ml/Dockerfile`, `infra/ml/requirements.txt`).
+
 ## Versioning rules
 
 - Use semantic model versions per task: `vMAJOR.MINOR.PATCH` (example: `v1.2.0`).
