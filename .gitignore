@@ -30,3 +30,5 @@ dist-ssr
 .env.*
 
 infra/trino/catalog/tf2.properties
+
+__pycache__

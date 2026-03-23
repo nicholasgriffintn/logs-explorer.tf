@@ -45,10 +45,44 @@ services:
     depends_on:
       superset-init:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8088/health', timeout=5)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     command:
       - /bin/sh
       - -c
       - superset run -h 0.0.0.0 -p 8088
 
+  superset-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tf2-superset-bootstrap
+    environment:
+      SUPERSET_BASE_URL: http://tf2-superset:8088
+      SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+      SUPERSET_TRINO_SQLALCHEMY_URI: ${SUPERSET_TRINO_SQLALCHEMY_URI:-trino://trino@tf2-trino:8080/tf2/default}
+      SUPERSET_QUERY_DIR: /workspace/trino-queries
+    volumes:
+      - ./bootstrap_superset.py:/app/pythonpath/bootstrap_superset.py:ro
+      - ../trino/queries:/workspace/trino-queries:ro
+    depends_on:
+      superset:
+        condition: service_healthy
+    command:
+      - python
+      - /app/pythonpath/bootstrap_superset.py
+    restart: "no"
+
 volumes:
   superset_home:
+
+networks:
+  default:
+    name: logs-explorer
