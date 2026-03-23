@@ -36,67 +36,365 @@ DASHBOARDS = (
 )
 
 SAVED_QUERY_FILES = (
-  ("Dashboard - Player Profile and Momentum", "21_dashboard_player_profile_and_momentum.sql"),
-  ("Dashboard - Map Competitiveness and Pace", "22_dashboard_map_competitiveness_and_pace.sql"),
-  ("Dashboard - Chat Behaviour and Tilt Risk", "23_dashboard_chat_behaviour_and_tilt_risk.sql"),
+  ("Player Profile and Momentum", "21_dashboard_player_profile_and_momentum.sql"),
+  ("Map Competitiveness and Pace", "22_dashboard_map_competitiveness_and_pace.sql"),
+  ("Chat Behaviour and Tilt Risk", "23_dashboard_chat_behaviour_and_tilt_risk.sql"),
 )
 
 DASHBOARD_CHART_SPECS = {
   "TF2 Player Profile and Momentum": [
     {
-      "slice_name": "Dashboard - Player Momentum Snapshot",
+      "slice_name": "Player Momentum Snapshot",
       "dataset": "serving_player_profiles",
-      "columns": [
-        "steamid",
-        "games_played",
-        "career_win_rate",
-        "momentum_label",
-        "rolling_10_avg_impact",
-        "tilt_risk_rate",
+      "layout_width": 12,
+      "layout_height": 56,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "steamid",
+              "games_played",
+              "career_win_rate",
+              "career_avg_impact",
+              "rolling_10_avg_impact",
+              "form_delta_impact",
+              "momentum_label",
+              "tilt_risk_rate",
+              "rolling_10_negative_chat_ratio",
+              "updated_at",
+            ],
+            "row_limit": 100,
+          },
+        }
       ],
-      "row_limit": 100,
-    }
+    },
+    {
+      "slice_name": "Momentum Cohort Distribution",
+      "dataset": "serving_player_profiles",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "pie",
+          "form_data": {
+            "query_mode": "aggregate",
+            "groupby": ["momentum_label"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "COUNT(*)",
+              "label": "Players",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "COUNT(*)",
+                "label": "Players",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 1000,
+            "sort_by_metric": True,
+          },
+        },
+        {
+          "viz_type": "dist_bar",
+          "form_data": {
+            "query_mode": "aggregate",
+            "groupby": ["momentum_label"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "COUNT(*)",
+              "label": "Players",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "COUNT(*)",
+                "label": "Players",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 1000,
+            "sort_by_metric": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "steamid",
+              "momentum_label",
+              "games_played",
+              "career_avg_impact",
+              "tilt_risk_rate",
+            ],
+            "row_limit": 200,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "Impact vs Tilt Bubble",
+      "dataset": "serving_player_profiles",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "steamid",
+              "momentum_label",
+              "games_played",
+              "career_avg_impact",
+              "tilt_risk_rate",
+            ],
+            "row_limit": 150,
+          },
+        },
+      ],
+    },
   ],
   "TF2 Map Competitiveness and Pace": [
     {
-      "slice_name": "Dashboard - Map Competitiveness Snapshot",
+      "slice_name": "Map Competitiveness Snapshot",
       "dataset": "serving_map_overview_daily",
-      "columns": [
-        "match_date",
-        "map",
-        "games",
-        "close_game_rate",
-        "blowout_rate",
-        "avg_kills_per_minute",
-        "active_players",
+      "layout_width": 12,
+      "layout_height": 56,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "match_date",
+              "map",
+              "games",
+              "avg_duration_minutes",
+              "avg_kills_per_minute",
+              "close_game_rate",
+              "blowout_rate",
+              "active_players",
+              "avg_negative_chat_ratio",
+              "tilt_signal_rate",
+            ],
+            "row_limit": 200,
+          },
+        }
       ],
-      "row_limit": 100,
-    }
+    },
+    {
+      "slice_name": "Daily Games Trend by Map",
+      "dataset": "serving_map_overview_daily",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "echarts_timeseries_line",
+          "form_data": {
+            "query_mode": "aggregate",
+            "granularity_sqla": "match_date",
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "since": "180 days ago",
+            "until": "now",
+            "groupby": ["map"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "SUM(games)",
+              "label": "Total Games",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "SUM(games)",
+                "label": "Total Games",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "show_legend": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": ["match_date", "map", "games", "active_players"],
+            "row_limit": 300,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "Match Quality Trend",
+      "dataset": "serving_map_overview_daily",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "echarts_timeseries_line",
+          "form_data": {
+            "query_mode": "aggregate",
+            "granularity_sqla": "match_date",
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "since": "180 days ago",
+            "until": "now",
+            "groupby": [],
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(close_game_rate)",
+                "label": "Avg Close Game Rate",
+                "hasCustomLabel": True,
+              },
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(blowout_rate)",
+                "label": "Avg Blowout Rate",
+                "hasCustomLabel": True,
+              },
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "show_legend": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": ["match_date", "map", "close_game_rate", "blowout_rate", "games"],
+            "row_limit": 300,
+          },
+        },
+      ],
+    },
   ],
   "TF2 Chat Behaviour and Tilt Risk": [
     {
-      "slice_name": "Dashboard - Player Tilt Risk Snapshot",
+      "slice_name": "Player Tilt Risk Snapshot",
       "dataset": "serving_player_profiles",
-      "columns": [
-        "steamid",
-        "momentum_label",
-        "rolling_10_negative_chat_ratio",
-        "tilt_risk_rate",
-        "recent_30_win_rate",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "steamid",
+              "momentum_label",
+              "rolling_10_negative_chat_ratio",
+              "tilt_risk_rate",
+              "recent_30_win_rate",
+              "form_delta_impact",
+            ],
+            "row_limit": 120,
+          },
+        }
       ],
-      "row_limit": 100,
     },
     {
-      "slice_name": "Dashboard - Map Chat Signal Snapshot",
+      "slice_name": "Map Chat Signal Snapshot",
       "dataset": "serving_map_overview_daily",
-      "columns": [
-        "match_date",
-        "map",
-        "avg_negative_chat_ratio",
-        "tilt_signal_rate",
-        "games",
+      "layout_width": 6,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "match_date",
+              "map",
+              "games",
+              "avg_negative_chat_ratio",
+              "tilt_signal_rate",
+              "active_players",
+            ],
+            "row_limit": 120,
+          },
+        }
       ],
-      "row_limit": 100,
+    },
+    {
+      "slice_name": "Map Tilt Signal Trend",
+      "dataset": "serving_map_overview_daily",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "echarts_timeseries_line",
+          "form_data": {
+            "query_mode": "aggregate",
+            "granularity_sqla": "match_date",
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "since": "90 days ago",
+            "until": "now",
+            "groupby": ["map"],
+            "metric": {
+              "expressionType": "SQL",
+              "sqlExpression": "AVG(tilt_signal_rate)",
+              "label": "Avg Tilt Signal Rate",
+              "hasCustomLabel": True,
+            },
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(tilt_signal_rate)",
+                "label": "Avg Tilt Signal Rate",
+                "hasCustomLabel": True,
+              }
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "show_legend": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": ["match_date", "map", "tilt_signal_rate", "games"],
+            "row_limit": 300,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "Chat vs Tilt Hotspots",
+      "dataset": "serving_map_overview_daily",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "match_date",
+              "map",
+              "games",
+              "avg_negative_chat_ratio",
+              "tilt_signal_rate",
+            ],
+            "row_limit": 300,
+          },
+        },
+      ],
     },
   ],
 }
@@ -421,15 +719,84 @@ def list_charts(headers: dict) -> list:
   return get_result_list(response)
 
 
-def build_table_chart_params(dataset_id: int, columns: list[str], row_limit: int) -> str:
+def coerce_layout_value(value: object, default: int, minimum: int, maximum: int) -> int:
+  try:
+    parsed = int(value)
+  except (TypeError, ValueError):
+    return default
+  return max(minimum, min(maximum, parsed))
+
+
+def build_chart_payload(
+  dataset_id: int,
+  dashboard_id: int,
+  slice_name: str,
+  variant: dict,
+) -> tuple[str, dict]:
+  viz_type = str(variant["viz_type"])
   form_data = {
     "datasource": f"{dataset_id}__table",
-    "viz_type": "table",
-    "query_mode": "raw",
-    "all_columns": columns,
-    "row_limit": row_limit,
+    "viz_type": viz_type,
   }
-  return json.dumps(form_data, sort_keys=True)
+  variant_form_data = variant.get("form_data", {})
+  if isinstance(variant_form_data, dict):
+    form_data.update(variant_form_data)
+  if "adhoc_filters" not in form_data:
+    form_data["adhoc_filters"] = []
+
+  payload = {
+    "slice_name": slice_name,
+    "viz_type": viz_type,
+    "datasource_id": dataset_id,
+    "datasource_type": "table",
+    "params": json.dumps(form_data, sort_keys=True),
+    "dashboards": [dashboard_id],
+  }
+  return viz_type, payload
+
+
+def upsert_chart(
+  headers: dict,
+  dashboard_id: int,
+  dataset_id: int,
+  spec: dict,
+  existing_chart: dict | None,
+) -> int:
+  slice_name = str(spec["slice_name"])
+  variants = spec.get("variants", [])
+  if not isinstance(variants, list) or not variants:
+    raise RuntimeError(f"Missing chart variants for {slice_name}")
+
+  existing_chart_id = int(existing_chart["id"]) if existing_chart else None
+  errors: list[str] = []
+  for variant in variants:
+    if not isinstance(variant, dict):
+      continue
+    viz_type, payload = build_chart_payload(
+      dataset_id=dataset_id,
+      dashboard_id=dashboard_id,
+      slice_name=slice_name,
+      variant=variant,
+    )
+    try:
+      if existing_chart_id is not None:
+        request_json("PUT", f"/api/v1/chart/{existing_chart_id}", payload=payload, headers=headers)
+        log(f"Updated chart: {slice_name} (id={existing_chart_id}, viz_type={viz_type})")
+        return existing_chart_id
+
+      created = request_json("POST", "/api/v1/chart/", payload=payload, headers=headers)
+      chart_id = int(created["id"])
+      log(f"Created chart: {slice_name} (id={chart_id}, viz_type={viz_type})")
+      return chart_id
+    except ApiError as err:
+      errors.append(f"{viz_type}: HTTP {err.code} {err.details}")
+      log(
+        f"Chart variant failed for {slice_name} "
+        f"(viz_type={viz_type}, status={err.code}); trying fallback"
+      )
+
+  joined_errors = " | ".join(errors)
+  raise RuntimeError(f"Unable to create/update chart {slice_name}: {joined_errors}")
 
 
 def ensure_charts_and_layouts(
@@ -441,67 +808,71 @@ def ensure_charts_and_layouts(
 
   for dashboard_title, specs in DASHBOARD_CHART_SPECS.items():
     dashboard_id = dashboard_ids[dashboard_title]
-    layout_chart_nodes: list[tuple[int, str]] = []
+    layout_chart_nodes: list[tuple[int, str, int, int]] = []
 
     for spec in specs:
-      dataset_name = spec["dataset"]
+      dataset_name = str(spec["dataset"])
       dataset_id = dataset_ids[dataset_name]
-      slice_name = spec["slice_name"]
-      params = build_table_chart_params(
-        dataset_id=dataset_id,
-        columns=spec["columns"],
-        row_limit=spec["row_limit"],
-      )
+      slice_name = str(spec["slice_name"])
 
-      existing = charts_by_name.get(slice_name)
-      if existing:
-        chart_id = int(existing["id"])
-        log(f"Chart already exists: {slice_name} (id={chart_id})")
-      else:
-        payload = {
-          "slice_name": slice_name,
-          "viz_type": "table",
-          "datasource_id": dataset_id,
-          "datasource_type": "table",
-          "params": params,
-          "dashboards": [dashboard_id],
-        }
-        created = request_json("POST", "/api/v1/chart/", payload=payload, headers=headers)
-        chart_id = int(created["id"])
-        log(f"Created chart: {slice_name} (id={chart_id})")
-      layout_chart_nodes.append((chart_id, slice_name))
+      chart_id = upsert_chart(
+        headers=headers,
+        dashboard_id=dashboard_id,
+        dataset_id=dataset_id,
+        spec=spec,
+        existing_chart=charts_by_name.get(slice_name),
+      )
+      charts_by_name[slice_name] = {"id": chart_id, "slice_name": slice_name}
+
+      width = coerce_layout_value(spec.get("layout_width", 12), default=12, minimum=1, maximum=12)
+      height = coerce_layout_value(spec.get("layout_height", 50), default=50, minimum=20, maximum=90)
+      layout_chart_nodes.append((chart_id, slice_name, width, height))
 
     root = {"id": "ROOT_ID", "type": "ROOT", "children": ["GRID_ID"]}
     grid_children: list[str] = []
+    row_children: dict[str, list[str]] = {}
     layout: dict[str, object] = {
       "DASHBOARD_VERSION_KEY": "v2",
       "ROOT_ID": root,
       "GRID_ID": {"id": "GRID_ID", "type": "GRID", "parents": ["ROOT_ID"], "children": grid_children},
     }
 
-    for index, (chart_id, slice_name) in enumerate(layout_chart_nodes, start=1):
-      row_id = f"ROW-{index}"
-      chart_node_id = f"CHART-{chart_id}"
-      grid_children.append(row_id)
-      layout[row_id] = {
-        "id": row_id,
-        "type": "ROW",
-        "parents": ["ROOT_ID", "GRID_ID"],
-        "children": [chart_node_id],
-        "meta": {"background": "BACKGROUND_TRANSPARENT"},
-      }
+    current_row_id: str | None = None
+    current_row_width = 0
+    row_number = 0
+
+    for index, (chart_id, slice_name, width, height) in enumerate(layout_chart_nodes, start=1):
+      if current_row_id is None or current_row_width + width > 12:
+        row_number += 1
+        current_row_id = f"ROW-{row_number}"
+        current_row_width = 0
+        grid_children.append(current_row_id)
+        row_children[current_row_id] = []
+        layout[current_row_id] = {
+          "id": current_row_id,
+          "type": "ROW",
+          "parents": ["ROOT_ID", "GRID_ID"],
+          "children": row_children[current_row_id],
+          "meta": {"background": "BACKGROUND_TRANSPARENT"},
+        }
+
+      chart_node_id = f"CHART-{chart_id}-{index}"
+      row_children[current_row_id].append(chart_node_id)
       layout[chart_node_id] = {
         "id": chart_node_id,
         "type": "CHART",
-        "parents": ["ROOT_ID", "GRID_ID", row_id],
+        "parents": ["ROOT_ID", "GRID_ID", current_row_id],
         "children": [],
         "meta": {
           "chartId": chart_id,
-          "height": 50,
-          "width": 12,
+          "height": height,
+          "width": width,
           "sliceName": slice_name,
         },
       }
+      current_row_width += width
+      if current_row_width >= 12:
+        current_row_id = None
 
     payload = {"position_json": json.dumps(layout, sort_keys=True)}
     request_json("PUT", f"/api/v1/dashboard/{dashboard_id}", payload=payload, headers=headers)
