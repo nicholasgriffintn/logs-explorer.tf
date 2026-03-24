@@ -64,6 +64,7 @@ Promotion flow:
 - `candidate -> staging -> production`
 - write a stage transition row to `ml_model_stage_history` for every change
 - set `is_active = true` only for the current production version
+- enforce promotion gates (quality + lineage) before `staging`/`production` transitions
 
 Use the stage transition helper for controlled promotions:
 
@@ -74,6 +75,14 @@ TO_STAGE=staging \
 CHANGED_BY=ml_engineer \
 CHANGE_REASON="passes offline checks" \
 infra/trino/queries/ml/run_ml_model_stage_transition.sh
+```
+
+Run gate checks directly (same thresholds used by stage transitions):
+
+```bash
+MODEL_NAME=win_probability_baseline \
+MODEL_VERSION=v1.0.1 \
+infra/trino/queries/ml/run_ml_promotion_gate_check.sh
 ```
 
 Then promote to production:

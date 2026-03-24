@@ -8,6 +8,8 @@ MODEL_VERSION="${MODEL_VERSION:-}"
 TO_STAGE="${TO_STAGE:-}"
 CHANGED_BY="${CHANGED_BY:-ml_operator}"
 CHANGE_REASON="${CHANGE_REASON:-manual stage transition}"
+ENFORCE_PROMOTION_GATES="${ENFORCE_PROMOTION_GATES:-true}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required" >&2
@@ -52,7 +54,7 @@ WHERE model_name = '${MODEL_NAME_SQL}'
   AND model_version = '${MODEL_VERSION_SQL}'
 ORDER BY created_at DESC
 LIMIT 1
-" | awk 'NR==2 {print $1}'
+" | awk 'NR==1 {print $1}'
 )"
 
 if [[ -z "$FROM_STAGE" ]]; then
@@ -63,6 +65,13 @@ fi
 if [[ "$FROM_STAGE" == "$TO_STAGE" ]]; then
   echo "Model ${MODEL_NAME}:${MODEL_VERSION} already in stage '${TO_STAGE}'"
   exit 0
+fi
+
+if [[ "$ENFORCE_PROMOTION_GATES" == "true" && "$TO_STAGE" != "candidate" && "$TO_STAGE" != "archived" ]]; then
+  MODEL_NAME="$MODEL_NAME" \
+  MODEL_VERSION="$MODEL_VERSION" \
+  TRINO_CONTAINER="$TRINO_CONTAINER" \
+  "$SCRIPT_DIR/run_ml_promotion_gate_check.sh"
 fi
 
 if [[ "$TO_STAGE" == "production" ]]; then

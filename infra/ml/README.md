@@ -33,3 +33,5 @@ This will:
 - `SNAPSHOT_ID` (optional pin; default is latest)
 - `TRAIN_RATIO`
 - `TRAINING_CODE_VERSION`, `FEATURE_SQL_VERSION`
+- `WIN_POLICY_*`, `TILT_POLICY_*` to tune threshold policy constraints
+- `GATE_*` to tune promotion gate thresholds (also used by stage-transition gate checks)

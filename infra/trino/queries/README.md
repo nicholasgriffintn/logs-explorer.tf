@@ -58,6 +58,7 @@ ML (`infra/trino/queries/ml`):
 - `ml_data_readiness_check.sql`: ML data quality/readiness checks
 - `run_ml_baseline_training.sh`: baseline model training + candidate registry upsert
 - `run_ml_readiness_check.sh`: one-command ML readiness checks
+- `run_ml_promotion_gate_check.sh`: promotion gate checker (quality + lineage)
 - `run_ml_model_stage_transition.sh`: stage transition helper + history write
 - `run_ml_model_rollback.sh`: rollback helper to repromote a model version
 

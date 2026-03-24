@@ -20,9 +20,13 @@ from typing import Any, Dict, List, Sequence, Tuple
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.inspection import permutation_importance
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
@@ -35,7 +39,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 from trino.dbapi import connect
 
 
@@ -66,6 +70,73 @@ class TemporalFold:
     name: str
     train_df: pd.DataFrame
     val_df: pd.DataFrame
+
+
+@dataclass
+class ThresholdPolicy:
+    threshold: float
+    min_precision: float
+    min_recall: float
+    selected_by_constraints: bool
+    precision: float
+    recall: float
+    f1: float
+
+
+class FeatureQualityTransformer(BaseEstimator, TransformerMixin):
+    """Reduce noisy cardinality and cap numeric outliers using train-only stats."""
+
+    def __init__(
+        self,
+        numeric_cols: Sequence[str],
+        map_col: str = "map",
+        map_min_frequency: int = 100,
+        lower_quantile: float = 0.01,
+        upper_quantile: float = 0.99,
+    ) -> None:
+        self.numeric_cols = numeric_cols
+        self.map_col = map_col
+        self.map_min_frequency = map_min_frequency
+        self.lower_quantile = lower_quantile
+        self.upper_quantile = upper_quantile
+        self.frequent_maps_: set[str] = set()
+        self.numeric_bounds_: Dict[str, Tuple[float, float]] = {}
+
+    def fit(self, x: pd.DataFrame, y: Any = None) -> "FeatureQualityTransformer":
+        df = x.copy()
+        if self.map_col in df.columns:
+            map_values = df[self.map_col].where(pd.notna(df[self.map_col]), "__MISSING__").astype(str)
+            counts = map_values.value_counts(dropna=False)
+            self.frequent_maps_ = set(counts[counts >= self.map_min_frequency].index.tolist())
+
+        bounds: Dict[str, Tuple[float, float]] = {}
+        for col in list(self.numeric_cols):
+            if col not in df.columns:
+                continue
+            values = pd.to_numeric(df[col], errors="coerce")
+            if values.notna().sum() == 0:
+                continue
+            lower = float(values.quantile(self.lower_quantile))
+            upper = float(values.quantile(self.upper_quantile))
+            if lower > upper:
+                lower, upper = upper, lower
+            bounds[col] = (lower, upper)
+        self.numeric_bounds_ = bounds
+        return self
+
+    def transform(self, x: pd.DataFrame) -> pd.DataFrame:
+        df = x.copy()
+        if self.map_col in df.columns and self.frequent_maps_:
+            map_values = df[self.map_col].where(pd.notna(df[self.map_col]), "__MISSING__").astype(str)
+            df[self.map_col] = np.where(map_values.isin(self.frequent_maps_), map_values, "__OTHER__")
+
+        for col, (lower, upper) in self.numeric_bounds_.items():
+            if col not in df.columns:
+                continue
+            values = pd.to_numeric(df[col], errors="coerce")
+            df[col] = values.clip(lower=lower, upper=upper)
+
+        return df
 
 
 class TrinoClient:
@@ -201,7 +272,7 @@ def assert_no_leakage_features(task_name: str, selected_features: Sequence[str],
         raise RuntimeError(f"{task_name} contains leakage-prone features: {joined}")
 
 
-def build_preprocessor(numeric_cols: Sequence[str], categorical_cols: Sequence[str]) -> ColumnTransformer:
+def build_linear_preprocessor(numeric_cols: Sequence[str], categorical_cols: Sequence[str]) -> ColumnTransformer:
     numeric = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
@@ -223,25 +294,90 @@ def build_preprocessor(numeric_cols: Sequence[str], categorical_cols: Sequence[s
     )
 
 
+def build_tree_preprocessor(numeric_cols: Sequence[str], categorical_cols: Sequence[str]) -> ColumnTransformer:
+    numeric = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+        ]
+    )
+    categorical = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            (
+                "ordinal",
+                OrdinalEncoder(
+                    handle_unknown="use_encoded_value",
+                    unknown_value=-1,
+                ),
+            ),
+        ]
+    )
+    return ColumnTransformer(
+        transformers=[
+            ("num", numeric, list(numeric_cols)),
+            ("cat", categorical, list(categorical_cols)),
+        ],
+        remainder="drop",
+    )
+
+
+def fit_calibrated_classifier(
+    base_estimator: Pipeline,
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    calibration_fraction: float = 0.15,
+) -> Any:
+    if len(x_train) < 2000:
+        return base_estimator.fit(x_train, y_train)
+
+    split_idx = int(len(x_train) * (1.0 - calibration_fraction))
+    split_idx = max(1000, min(len(x_train) - 500, split_idx))
+    x_fit = x_train.iloc[:split_idx]
+    y_fit = y_train.iloc[:split_idx]
+    x_cal = x_train.iloc[split_idx:]
+    y_cal = y_train.iloc[split_idx:]
+
+    fitted = base_estimator.fit(x_fit, y_fit)
+    if len(np.unique(y_cal)) < 2:
+        return fitted
+
+    return CalibratedClassifierCV(
+        estimator=fitted,
+        method="sigmoid",
+        cv="prefit",
+    ).fit(x_cal, y_cal)
+
+
 def train_win_model(
     x_train: pd.DataFrame,
     y_train: pd.Series,
     numeric_cols: Sequence[str],
     categorical_cols: Sequence[str],
-) -> Pipeline:
-    return Pipeline(
+    calibrate: bool = True,
+) -> Any:
+    # Fit once, calibrate on a holdout split to avoid expensive full-CV retraining.
+    base = Pipeline(
         steps=[
-            ("prep", build_preprocessor(numeric_cols, categorical_cols)),
+            ("quality", FeatureQualityTransformer(numeric_cols=numeric_cols, map_min_frequency=120)),
+            ("prep", build_tree_preprocessor(numeric_cols, categorical_cols)),
             (
                 "model",
-                LogisticRegression(
-                    C=0.25,  # stronger regularisation than default
-                    max_iter=250,
-                    solver="lbfgs",
+                HistGradientBoostingClassifier(
+                    loss="log_loss",
+                    learning_rate=0.05,
+                    max_iter=320,
+                    max_depth=8,
+                    max_leaf_nodes=63,
+                    min_samples_leaf=250,
+                    l2_regularization=0.1,
+                    random_state=42,
                 ),
             ),
-        ]
-    ).fit(x_train, y_train)
+        ],
+    )
+    if calibrate:
+        return fit_calibrated_classifier(base, x_train, y_train)
+    return base.fit(x_train, y_train)
 
 
 def train_tilt_model(
@@ -249,10 +385,12 @@ def train_tilt_model(
     y_train: pd.Series,
     numeric_cols: Sequence[str],
     categorical_cols: Sequence[str],
-) -> Pipeline:
-    return Pipeline(
+    calibrate: bool = True,
+) -> Any:
+    base = Pipeline(
         steps=[
-            ("prep", build_preprocessor(numeric_cols, categorical_cols)),
+            ("quality", FeatureQualityTransformer(numeric_cols=numeric_cols, map_min_frequency=120)),
+            ("prep", build_linear_preprocessor(numeric_cols, categorical_cols)),
             (
                 "model",
                 LogisticRegression(
@@ -262,8 +400,11 @@ def train_tilt_model(
                     class_weight="balanced",
                 ),
             ),
-        ]
-    ).fit(x_train, y_train)
+        ],
+    )
+    if calibrate:
+        return fit_calibrated_classifier(base, x_train, y_train)
+    return base.fit(x_train, y_train)
 
 
 def train_impact_model(
@@ -274,8 +415,21 @@ def train_impact_model(
 ) -> Pipeline:
     return Pipeline(
         steps=[
-            ("prep", build_preprocessor(numeric_cols, categorical_cols)),
-            ("model", Ridge(alpha=40.0)),
+            ("quality", FeatureQualityTransformer(numeric_cols=numeric_cols, map_min_frequency=120)),
+            ("prep", build_tree_preprocessor(numeric_cols, categorical_cols)),
+            (
+                "model",
+                HistGradientBoostingRegressor(
+                    loss="squared_error",
+                    learning_rate=0.05,
+                    max_iter=350,
+                    max_depth=8,
+                    max_leaf_nodes=63,
+                    min_samples_leaf=250,
+                    l2_regularization=0.1,
+                    random_state=42,
+                ),
+            ),
         ]
     ).fit(x_train, y_train)
 
@@ -300,6 +454,7 @@ def binary_metrics(y_true: np.ndarray, probs: np.ndarray, threshold: float = 0.5
         "false_negatives": float(fn),
         "true_positives": float(tp),
         "positive_rate": float(np.mean(y_true)),
+        "predicted_positive_rate": float(np.mean(preds)),
     }
 
 
@@ -326,9 +481,60 @@ def threshold_table(y_true: np.ndarray, probs: np.ndarray, thresholds: Sequence[
     return rows
 
 
+def choose_threshold_policy(
+    y_true: np.ndarray,
+    probs: np.ndarray,
+    thresholds: Sequence[float],
+    min_precision: float,
+    min_recall: float,
+) -> ThresholdPolicy:
+    rows = threshold_table(y_true, probs, thresholds)
+    constrained = [
+        row
+        for row in rows
+        if row["precision"] >= min_precision and row["recall"] >= min_recall
+    ]
+    if constrained:
+        best = max(constrained, key=lambda row: (row["f1"], row["precision"], row["recall"]))
+        return ThresholdPolicy(
+            threshold=float(best["threshold"]),
+            min_precision=min_precision,
+            min_recall=min_recall,
+            selected_by_constraints=True,
+            precision=float(best["precision"]),
+            recall=float(best["recall"]),
+            f1=float(best["f1"]),
+        )
+    fallback = max(rows, key=lambda row: (row["f1"], row["precision"], row["recall"]))
+    return ThresholdPolicy(
+        threshold=float(fallback["threshold"]),
+        min_precision=min_precision,
+        min_recall=min_recall,
+        selected_by_constraints=False,
+        precision=float(fallback["precision"]),
+        recall=float(fallback["recall"]),
+        f1=float(fallback["f1"]),
+    )
+
+
+def with_selected_threshold(rows: List[Dict[str, float]], selected_threshold: float) -> List[Dict[str, float]]:
+    out: List[Dict[str, float]] = []
+    for row in rows:
+        copied = dict(row)
+        copied["policy_selected"] = 1.0 if abs(copied["threshold"] - selected_threshold) < 1e-9 else 0.0
+        out.append(copied)
+    return out
+
+
 def calibration_table(y_true: np.ndarray, probs: np.ndarray, bins: int = 10) -> List[Dict[str, float]]:
     df = pd.DataFrame({"y_true": y_true, "probs": probs})
-    df["bin"] = pd.qcut(df["probs"], q=min(bins, len(df)), labels=False, duplicates="drop")
+    clipped = np.clip(df["probs"].to_numpy(dtype=float), 0.0, 1.0)
+    df["bin"] = pd.cut(
+        clipped,
+        bins=np.linspace(0.0, 1.0, bins + 1),
+        labels=False,
+        include_lowest=True,
+    )
     summary = (
         df.groupby("bin", dropna=True)
         .agg(
@@ -341,10 +547,14 @@ def calibration_table(y_true: np.ndarray, probs: np.ndarray, bins: int = 10) -> 
         .reset_index()
     )
     out: List[Dict[str, float]] = []
-    for _, row in summary.iterrows():
+    for bin_id in range(bins):
+        bin_df = summary[summary["bin"] == bin_id]
+        if bin_df.empty:
+            continue
+        row = bin_df.iloc[0]
         out.append(
             {
-                "bin": float(row["bin"]),
+                "bin": float(bin_id),
                 "rows": float(row["rows"]),
                 "avg_predicted": float(row["avg_predicted"]),
                 "avg_observed": float(row["avg_observed"]),
@@ -355,17 +565,57 @@ def calibration_table(y_true: np.ndarray, probs: np.ndarray, bins: int = 10) -> 
     return out
 
 
-def top_coefficients(model: Pipeline, top_n: int = 12) -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]:
-    prep: ColumnTransformer = model.named_steps["prep"]
-    estimator = model.named_steps["model"]
-    names = prep.get_feature_names_out()
-    coef = estimator.coef_
-    if isinstance(coef, np.ndarray) and coef.ndim > 1:
-        coef = coef[0]
-    coef = np.asarray(coef, dtype=float)
-    pairs = list(zip(names.tolist(), coef.tolist()))
-    pairs_sorted = sorted(pairs, key=lambda x: x[1], reverse=True)
-    return pairs_sorted[:top_n], sorted(pairs, key=lambda x: x[1])[:top_n]
+def expected_calibration_error(y_true: np.ndarray, probs: np.ndarray, bins: int = 10) -> float:
+    if len(y_true) == 0:
+        return float("nan")
+    df = pd.DataFrame({"y_true": y_true, "probs": probs})
+    clipped = np.clip(df["probs"].to_numpy(dtype=float), 0.0, 1.0)
+    df["bin"] = pd.cut(
+        clipped,
+        bins=np.linspace(0.0, 1.0, bins + 1),
+        labels=False,
+        include_lowest=True,
+    )
+    total = float(len(df))
+    ece = 0.0
+    for _, bin_df in df.groupby("bin", dropna=True):
+        weight = len(bin_df) / total
+        ece += weight * abs(float(bin_df["probs"].mean()) - float(bin_df["y_true"].mean()))
+    return float(ece)
+
+
+def top_feature_effects(
+    model: Any,
+    x_eval: pd.DataFrame,
+    y_eval: np.ndarray,
+    *,
+    is_classification: bool,
+    top_n: int = 12,
+    sample_size: int = 5000,
+) -> List[Tuple[str, float]]:
+    scoring = "roc_auc" if is_classification else "neg_root_mean_squared_error"
+    if len(x_eval) == 0:
+        return []
+    y_series = pd.Series(y_eval, index=x_eval.index)
+    sample_n = min(sample_size, len(x_eval))
+    if sample_n < len(x_eval):
+        sample_idx = x_eval.sample(n=sample_n, random_state=42).index
+        x_sample = x_eval.loc[sample_idx]
+        y_sample = y_series.loc[x_sample.index].to_numpy()
+    else:
+        x_sample = x_eval
+        y_sample = y_series.to_numpy()
+
+    importance = permutation_importance(
+        estimator=model,
+        X=x_sample,
+        y=y_sample,
+        n_repeats=2,
+        random_state=42,
+        scoring=scoring,
+    )
+    pairs = list(zip(x_sample.columns.tolist(), importance.importances_mean.tolist()))
+    return sorted(pairs, key=lambda x: x[1], reverse=True)[:top_n]
 
 
 def classification_metrics_by_segment(
@@ -443,7 +693,7 @@ def temporal_backtest_rows(
         if model_kind == "win":
             y_train = fold.train_df["label_win"].astype(int)
             y_val = fold.val_df["label_win"].astype(int)
-            model = train_win_model(x_train, y_train, numeric_cols, categorical_cols)
+            model = train_win_model(x_train, y_train, numeric_cols, categorical_cols, calibrate=False)
             probs = model.predict_proba(x_val)[:, 1]
             metrics = binary_metrics(y_val.to_numpy(), probs)
             rows.append(
@@ -462,7 +712,7 @@ def temporal_backtest_rows(
         elif model_kind == "tilt":
             y_train = fold.train_df["label_tilt"].astype(int)
             y_val = fold.val_df["label_tilt"].astype(int)
-            model = train_tilt_model(x_train, y_train, numeric_cols, categorical_cols)
+            model = train_tilt_model(x_train, y_train, numeric_cols, categorical_cols, calibrate=False)
             probs = model.predict_proba(x_val)[:, 1]
             metrics = binary_metrics(y_val.to_numpy(), probs)
             rows.append(
@@ -494,6 +744,106 @@ def temporal_backtest_rows(
                 }
             )
     return rows
+
+
+def gate_result(
+    model_name: str,
+    gate_name: str,
+    comparator: str,
+    actual: float,
+    target: float,
+) -> Dict[str, Any]:
+    if np.isnan(actual):
+        passed = False
+    elif comparator == ">=":
+        passed = actual >= target
+    else:
+        passed = actual <= target
+    return {
+        "model_name": model_name,
+        "gate_name": gate_name,
+        "comparator": comparator,
+        "actual": actual,
+        "target": target,
+        "status": "PASS" if passed else "FAIL",
+    }
+
+
+def fold_metric(rows: Sequence[Dict[str, Any]], key: str, fn: str) -> float:
+    values = [float(row[key]) for row in rows if key in row and pd.notna(row[key])]
+    if not values:
+        return float("nan")
+    if fn == "min":
+        return float(min(values))
+    if fn == "max":
+        return float(max(values))
+    if len(values) == 1:
+        return 0.0
+    return float(np.std(values, ddof=1))
+
+
+def build_promotion_gates(
+    win_metrics: Dict[str, float],
+    impact_metrics: Dict[str, float],
+    tilt_metrics: Dict[str, float],
+    win_backtest_rows: Sequence[Dict[str, Any]],
+    impact_backtest_rows: Sequence[Dict[str, Any]],
+    tilt_backtest_rows: Sequence[Dict[str, Any]],
+    *,
+    win_min_f1: float,
+    win_max_brier: float,
+    win_min_fold_f1: float,
+    impact_max_rmse: float,
+    impact_max_mae: float,
+    impact_max_fold_rmse: float,
+    tilt_min_f1: float,
+    tilt_max_brier: float,
+    tilt_min_recall: float,
+    tilt_max_fold_f1_std: float,
+) -> Tuple[List[Dict[str, Any]], Dict[str, bool]]:
+    rows: List[Dict[str, Any]] = []
+    rows.append(gate_result("win_probability_baseline", "f1", ">=", float(win_metrics["f1"]), win_min_f1))
+    rows.append(gate_result("win_probability_baseline", "brier", "<=", float(win_metrics["brier"]), win_max_brier))
+    rows.append(
+        gate_result(
+            "win_probability_baseline",
+            "min_fold_f1",
+            ">=",
+            fold_metric(win_backtest_rows, "f1", "min"),
+            win_min_fold_f1,
+        )
+    )
+
+    rows.append(gate_result("impact_percentile_baseline", "rmse", "<=", float(impact_metrics["rmse"]), impact_max_rmse))
+    rows.append(gate_result("impact_percentile_baseline", "mae", "<=", float(impact_metrics["mae"]), impact_max_mae))
+    rows.append(
+        gate_result(
+            "impact_percentile_baseline",
+            "max_fold_rmse",
+            "<=",
+            fold_metric(impact_backtest_rows, "rmse", "max"),
+            impact_max_fold_rmse,
+        )
+    )
+
+    rows.append(gate_result("tilt_risk_baseline", "f1", ">=", float(tilt_metrics["f1"]), tilt_min_f1))
+    rows.append(gate_result("tilt_risk_baseline", "brier", "<=", float(tilt_metrics["brier"]), tilt_max_brier))
+    rows.append(gate_result("tilt_risk_baseline", "recall", ">=", float(tilt_metrics["recall"]), tilt_min_recall))
+    rows.append(
+        gate_result(
+            "tilt_risk_baseline",
+            "fold_f1_stddev",
+            "<=",
+            fold_metric(tilt_backtest_rows, "f1", "std"),
+            tilt_max_fold_f1_std,
+        )
+    )
+
+    readiness: Dict[str, bool] = {}
+    for model_name in ("win_probability_baseline", "impact_percentile_baseline", "tilt_risk_baseline"):
+        model_rows = [row for row in rows if row["model_name"] == model_name]
+        readiness[model_name] = bool(model_rows) and all(row["status"] == "PASS" for row in model_rows)
+    return rows, readiness
 
 
 def ensure_dir(path: pathlib.Path) -> None:
@@ -637,7 +987,11 @@ def classification_daily_metrics_rows(
     for progress_date, day_df in scored.groupby("match_date", dropna=False):
         if pd.isna(progress_date):
             continue
-        metrics = binary_metrics(day_df["y_true"].to_numpy(dtype=int), day_df["probs"].to_numpy(dtype=float))
+        metrics = binary_metrics(
+            day_df["y_true"].to_numpy(dtype=int),
+            day_df["probs"].to_numpy(dtype=float),
+            threshold=threshold,
+        )
         rows.append(
             {
                 "progress_date": progress_date,
@@ -763,23 +1117,91 @@ def write_report(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     metric_by_model: Dict[str, Dict[str, float]],
+    win_threshold_policy: ThresholdPolicy,
+    tilt_threshold_policy: ThresholdPolicy,
     win_threshold_rows: List[Dict[str, float]],
     tilt_threshold_rows: List[Dict[str, float]],
     win_calibration_rows: List[Dict[str, float]],
     tilt_calibration_rows: List[Dict[str, float]],
-    win_top_pos: List[Tuple[str, float]],
-    win_top_neg: List[Tuple[str, float]],
-    tilt_top_pos: List[Tuple[str, float]],
-    tilt_top_neg: List[Tuple[str, float]],
-    impact_top_pos: List[Tuple[str, float]],
-    impact_top_neg: List[Tuple[str, float]],
+    win_top_features: List[Tuple[str, float]],
+    tilt_top_features: List[Tuple[str, float]],
+    impact_top_features: List[Tuple[str, float]],
     win_backtest_rows: List[Dict[str, Any]],
     tilt_backtest_rows: List[Dict[str, Any]],
     impact_backtest_rows: List[Dict[str, Any]],
     win_segment_rows: List[Dict[str, Any]],
     tilt_segment_rows: List[Dict[str, Any]],
     impact_segment_rows: List[Dict[str, Any]],
+    promotion_gate_rows: List[Dict[str, Any]],
 ) -> None:
+    model_order = [
+        "win_probability_baseline",
+        "impact_percentile_baseline",
+        "tilt_risk_baseline",
+    ]
+    gate_rows_by_model = {
+        model_name: [row for row in promotion_gate_rows if row["model_name"] == model_name]
+        for model_name in model_order
+    }
+
+    def gate_failure_text(row: Dict[str, Any]) -> str:
+        comparator = str(row["comparator"])
+        fail_symbol = "<" if comparator == ">=" else ">"
+        return f"{row['gate_name']} ({float(row['actual']):.4f} {fail_symbol} {float(row['target']):.4f})"
+
+    decision_rows: List[Dict[str, Any]] = []
+    approved_models: List[str] = []
+    blocked_models: List[str] = []
+    for model_name in model_order:
+        model_gate_rows = gate_rows_by_model.get(model_name, [])
+        failures = [row for row in model_gate_rows if row.get("status") == "FAIL"]
+        if model_gate_rows and not failures:
+            approved_models.append(model_name)
+            decision_rows.append(
+                {
+                    "model": model_name,
+                    "decision": "approved",
+                    "reason": "all promotion gates pass",
+                }
+            )
+        else:
+            blocked_models.append(model_name)
+            decision_rows.append(
+                {
+                    "model": model_name,
+                    "decision": "blocked",
+                    "reason": "; ".join(gate_failure_text(row) for row in failures) or "missing gate results",
+                }
+            )
+
+    if approved_models == ["tilt_risk_baseline"]:
+        outcome_line = "Promote `tilt_risk_baseline` only."
+    elif approved_models:
+        outcome_line = "Promote: " + ", ".join(f"`{name}`" for name in approved_models) + "."
+    else:
+        outcome_line = "Do not promote any model in this run."
+
+    threshold_rows_with_policy: List[Dict[str, Any]] = []
+    for row in win_threshold_rows:
+        copied = dict(row)
+        copied["meets_precision_target"] = float(copied["precision"] >= win_threshold_policy.min_precision)
+        copied["meets_recall_target"] = float(copied["recall"] >= win_threshold_policy.min_recall)
+        copied["meets_policy_constraints"] = float(
+            copied["meets_precision_target"] == 1.0 and copied["meets_recall_target"] == 1.0
+        )
+        threshold_rows_with_policy.append(copied)
+    for row in tilt_threshold_rows:
+        copied = dict(row)
+        copied["meets_precision_target"] = float(copied["precision"] >= tilt_threshold_policy.min_precision)
+        copied["meets_recall_target"] = float(copied["recall"] >= tilt_threshold_policy.min_recall)
+        copied["meets_policy_constraints"] = float(
+            copied["meets_precision_target"] == 1.0 and copied["meets_recall_target"] == 1.0
+        )
+        threshold_rows_with_policy.append(copied)
+
+    def effect_rows(pairs: List[Tuple[str, float]]) -> List[Dict[str, Any]]:
+        return [{"feature": f, "permutation_importance": w} for f, w in pairs]
+
     lines: List[str] = []
     lines.append("# ML offline evaluation report")
     lines.append("")
@@ -788,6 +1210,124 @@ def write_report(
     lines.append(f"- Train rows: `{len(train_df)}`")
     lines.append(f"- Validation rows: `{len(val_df)}`")
     lines.append(f"- Validation date range: `{val_df['match_time'].min()}` to `{val_df['match_time'].max()}`")
+    lines.append("")
+    lines.append("## Executive summary")
+    lines.append("")
+    lines.append(f"- Outcome: {outcome_line}")
+    for row in decision_rows:
+        lines.append(f"- `{row['model']}`: {row['decision']} ({row['reason']}).")
+    lines.append(
+        f"- Win operational rate: at threshold `{win_threshold_policy.threshold:.2f}`, predicted-positive volume is "
+        f"`{100.0 * metric_by_model['win_probability_baseline']['predicted_positive_rate']:.2f}%` of validation rows."
+    )
+    lines.append(
+        f"- Tilt operational rate: at threshold `{tilt_threshold_policy.threshold:.2f}`, predicted-positive volume is "
+        f"`{100.0 * metric_by_model['tilt_risk_baseline']['predicted_positive_rate']:.2f}%` of validation rows."
+    )
+    lines.append("")
+    lines.append("### Decision block")
+    lines.append("")
+    lines.extend(format_table(decision_rows, ["model", "decision", "reason"]))
+    lines.append("")
+    lines.append("## Promotion gates")
+    lines.append("")
+    lines.extend(
+        format_table(
+            promotion_gate_rows,
+            ["model_name", "gate_name", "comparator", "target", "actual", "status"],
+        )
+    )
+    lines.append("")
+    lines.append("## Key operating numbers")
+    lines.append("")
+    lines.append("### Temporal fold minima and variance")
+    lines.append("")
+    temporal_rows = [
+        {
+            "model": "win_probability_baseline",
+            "min_fold_f1": fold_metric(win_backtest_rows, "f1", "min"),
+            "fold_f1_stddev": fold_metric(win_backtest_rows, "f1", "std"),
+        },
+        {
+            "model": "tilt_risk_baseline",
+            "min_fold_f1": fold_metric(tilt_backtest_rows, "f1", "min"),
+            "fold_f1_stddev": fold_metric(tilt_backtest_rows, "f1", "std"),
+        },
+        {
+            "model": "impact_percentile_baseline",
+            "max_fold_rmse": fold_metric(impact_backtest_rows, "rmse", "max"),
+            "fold_rmse_stddev": fold_metric(impact_backtest_rows, "rmse", "std"),
+        },
+    ]
+    lines.extend(
+        format_table(
+            temporal_rows,
+            ["model", "min_fold_f1", "fold_f1_stddev", "max_fold_rmse", "fold_rmse_stddev"],
+        )
+    )
+    lines.append("")
+    lines.append("### Selected thresholds and expected volume")
+    lines.append("")
+    policy_rows = [
+        {
+            "model": "win_probability_baseline",
+            "threshold": win_threshold_policy.threshold,
+            "min_precision_target": win_threshold_policy.min_precision,
+            "min_recall_target": win_threshold_policy.min_recall,
+            "selected_by_constraints": float(win_threshold_policy.selected_by_constraints),
+            "precision": win_threshold_policy.precision,
+            "recall": win_threshold_policy.recall,
+            "f1": win_threshold_policy.f1,
+            "predicted_positive_rate": metric_by_model["win_probability_baseline"]["predicted_positive_rate"],
+        },
+        {
+            "model": "tilt_risk_baseline",
+            "threshold": tilt_threshold_policy.threshold,
+            "min_precision_target": tilt_threshold_policy.min_precision,
+            "min_recall_target": tilt_threshold_policy.min_recall,
+            "selected_by_constraints": float(tilt_threshold_policy.selected_by_constraints),
+            "precision": tilt_threshold_policy.precision,
+            "recall": tilt_threshold_policy.recall,
+            "f1": tilt_threshold_policy.f1,
+            "predicted_positive_rate": metric_by_model["tilt_risk_baseline"]["predicted_positive_rate"],
+        },
+    ]
+    lines.extend(
+        format_table(
+            policy_rows,
+            [
+                "model",
+                "threshold",
+                "min_precision_target",
+                "min_recall_target",
+                "selected_by_constraints",
+                "precision",
+                "recall",
+                "f1",
+                "predicted_positive_rate",
+            ],
+        )
+    )
+    lines.append("")
+    lines.append("### Calibration quality")
+    lines.append("")
+    lines.extend(
+        format_table(
+            [
+                {
+                    "model": "win_probability_baseline",
+                    "brier": metric_by_model["win_probability_baseline"]["brier"],
+                    "ece": metric_by_model["win_probability_baseline"]["ece"],
+                },
+                {
+                    "model": "tilt_risk_baseline",
+                    "brier": metric_by_model["tilt_risk_baseline"]["brier"],
+                    "ece": metric_by_model["tilt_risk_baseline"]["ece"],
+                },
+            ],
+            ["model", "brier", "ece"],
+        )
+    )
     lines.append("")
     lines.append("## Dataset profile")
     lines.append("")
@@ -875,13 +1415,47 @@ def write_report(
     lines.append("")
     lines.append("### Win model")
     lines.append("")
-    lines.extend(format_table(win_threshold_rows, ["threshold", "precision", "recall", "f1", "predicted_positive_rate"]))
+    win_threshold_rows_only = threshold_rows_with_policy[: len(win_threshold_rows)]
+    lines.extend(
+        format_table(
+            win_threshold_rows_only,
+            [
+                "threshold",
+                "precision",
+                "recall",
+                "f1",
+                "predicted_positive_rate",
+                "meets_precision_target",
+                "meets_recall_target",
+                "meets_policy_constraints",
+                "policy_selected",
+            ],
+        )
+    )
     lines.append("")
     lines.append("### Tilt model")
     lines.append("")
-    lines.extend(format_table(tilt_threshold_rows, ["threshold", "precision", "recall", "f1", "predicted_positive_rate"]))
+    tilt_threshold_rows_only = threshold_rows_with_policy[len(win_threshold_rows):]
+    lines.extend(
+        format_table(
+            tilt_threshold_rows_only,
+            [
+                "threshold",
+                "precision",
+                "recall",
+                "f1",
+                "predicted_positive_rate",
+                "meets_precision_target",
+                "meets_recall_target",
+                "meets_policy_constraints",
+                "policy_selected",
+            ],
+        )
+    )
     lines.append("")
     lines.append("## Calibration tables")
+    lines.append("")
+    lines.append("- Bins are fixed-width probability buckets over `[0, 1]`; sparse bins indicate concentrated predictions.")
     lines.append("")
     lines.append("### Win model")
     lines.append("")
@@ -891,48 +1465,42 @@ def write_report(
     lines.append("")
     lines.extend(format_table(tilt_calibration_rows, ["bin", "rows", "min_prob", "max_prob", "avg_predicted", "avg_observed"]))
     lines.append("")
-    lines.append("## Top coefficients")
+    lines.append("## Feature effects")
     lines.append("")
-
-    def coef_rows(pairs: List[Tuple[str, float]]) -> List[Dict[str, Any]]:
-        return [{"feature": f, "weight": w} for f, w in pairs]
-
-    lines.append("### Win positive weights")
-    lines.extend(format_table(coef_rows(win_top_pos), ["feature", "weight"]))
+    lines.append(
+        "- Permutation importance values are score deltas after shuffling a feature; they are ranking diagnostics, not directional causal effects."
+    )
     lines.append("")
-    lines.append("### Win negative weights")
-    lines.extend(format_table(coef_rows(win_top_neg), ["feature", "weight"]))
+    lines.append("### Win top permutation importances")
+    lines.extend(format_table(effect_rows(win_top_features), ["feature", "permutation_importance"]))
     lines.append("")
-    lines.append("### Tilt positive weights")
-    lines.extend(format_table(coef_rows(tilt_top_pos), ["feature", "weight"]))
+    lines.append("### Tilt top permutation importances")
+    lines.extend(format_table(effect_rows(tilt_top_features), ["feature", "permutation_importance"]))
     lines.append("")
-    lines.append("### Tilt negative weights")
-    lines.extend(format_table(coef_rows(tilt_top_neg), ["feature", "weight"]))
-    lines.append("")
-    lines.append("### Impact positive weights")
-    lines.extend(format_table(coef_rows(impact_top_pos), ["feature", "weight"]))
-    lines.append("")
-    lines.append("### Impact negative weights")
-    lines.extend(format_table(coef_rows(impact_top_neg), ["feature", "weight"]))
+    lines.append("### Impact top permutation importances")
+    lines.extend(format_table(effect_rows(impact_top_features), ["feature", "permutation_importance"]))
     lines.append("")
     lines.append("## Calibration notes")
     lines.append("")
     lines.append(
-        "- Win and impact models now use pre-match form/context features only; outcome-proxy leakage features are blocked at training time."
+        "- Win and impact models now use train-time feature quality controls: rare map bucketing and quantile clipping on numeric outliers."
+    )
+    lines.append(
+        "- Win uses a calibrated gradient-boosted classifier and impact uses a non-linear gradient-boosted regressor."
     )
     lines.append(
         "- Temporal backtesting rows above should be treated as the baseline promotion signal, not a single split metric."
     )
     lines.append(
-        f"- Win Brier score: `{metric_by_model['win_probability_baseline']['brier']:.4f}`. "
-        "If production thresholding matters, tune threshold against business costs."
+        f"- Win Brier/ECE: `{metric_by_model['win_probability_baseline']['brier']:.4f}` / "
+        f"`{metric_by_model['win_probability_baseline']['ece']:.4f}` at threshold `{win_threshold_policy.threshold:.2f}`."
     )
     lines.append(
-        f"- Tilt Brier score: `{metric_by_model['tilt_risk_baseline']['brier']:.4f}`. "
-        "Class imbalance is handled with `class_weight=balanced`; calibrate with isotonic regression before production promotion."
+        f"- Tilt Brier/ECE: `{metric_by_model['tilt_risk_baseline']['brier']:.4f}` / "
+        f"`{metric_by_model['tilt_risk_baseline']['ece']:.4f}` at threshold `{tilt_threshold_policy.threshold:.2f}`."
     )
     lines.append(
-        "- Impact RMSE/MAE are baseline quality only; assess residuals by map and class usage slices before staging promotion."
+        "- Promotion stage transitions are blocked when gate rows above include FAIL."
     )
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -955,6 +1523,56 @@ def main() -> int:
     parser.add_argument("--feature-sql-version", default=os.environ.get("FEATURE_SQL_VERSION", "unknown"))
     parser.add_argument("--min-fold-train-rows", type=int, default=int(os.environ.get("MIN_FOLD_TRAIN_ROWS", "20000")))
     parser.add_argument("--min-fold-val-rows", type=int, default=int(os.environ.get("MIN_FOLD_VAL_ROWS", "5000")))
+    parser.add_argument(
+        "--win-policy-min-precision",
+        type=float,
+        default=float(os.environ.get("WIN_POLICY_MIN_PRECISION", "0.60")),
+    )
+    parser.add_argument(
+        "--win-policy-min-recall",
+        type=float,
+        default=float(os.environ.get("WIN_POLICY_MIN_RECALL", "0.55")),
+    )
+    parser.add_argument(
+        "--tilt-policy-min-precision",
+        type=float,
+        default=float(os.environ.get("TILT_POLICY_MIN_PRECISION", "0.75")),
+    )
+    parser.add_argument(
+        "--tilt-policy-min-recall",
+        type=float,
+        default=float(os.environ.get("TILT_POLICY_MIN_RECALL", "0.95")),
+    )
+    parser.add_argument("--gate-win-min-f1", type=float, default=float(os.environ.get("GATE_WIN_MIN_F1", "0.66")))
+    parser.add_argument("--gate-win-max-brier", type=float, default=float(os.environ.get("GATE_WIN_MAX_BRIER", "0.20")))
+    parser.add_argument(
+        "--gate-win-min-fold-f1",
+        type=float,
+        default=float(os.environ.get("GATE_WIN_MIN_FOLD_F1", "0.60")),
+    )
+    parser.add_argument(
+        "--gate-impact-max-rmse",
+        type=float,
+        default=float(os.environ.get("GATE_IMPACT_MAX_RMSE", "20.00")),
+    )
+    parser.add_argument("--gate-impact-max-mae", type=float, default=float(os.environ.get("GATE_IMPACT_MAX_MAE", "16.00")))
+    parser.add_argument(
+        "--gate-impact-max-fold-rmse",
+        type=float,
+        default=float(os.environ.get("GATE_IMPACT_MAX_FOLD_RMSE", "22.00")),
+    )
+    parser.add_argument("--gate-tilt-min-f1", type=float, default=float(os.environ.get("GATE_TILT_MIN_F1", "0.85")))
+    parser.add_argument("--gate-tilt-max-brier", type=float, default=float(os.environ.get("GATE_TILT_MAX_BRIER", "0.02")))
+    parser.add_argument(
+        "--gate-tilt-min-recall",
+        type=float,
+        default=float(os.environ.get("GATE_TILT_MIN_RECALL", "0.95")),
+    )
+    parser.add_argument(
+        "--gate-tilt-max-fold-f1-std",
+        type=float,
+        default=float(os.environ.get("GATE_TILT_MAX_FOLD_F1_STD", "0.03")),
+    )
     args = parser.parse_args()
 
     trino_cfg = TrinoConfig(
@@ -1087,18 +1705,39 @@ def main() -> int:
     tilt_probs = tilt_model.predict_proba(x_val_tilt)[:, 1]
     impact_preds = np.clip(impact_model.predict(x_val_impact), 1.0, 100.0)
 
-    win_metrics = binary_metrics(y_val_win.to_numpy(), win_probs)
-    tilt_metrics = binary_metrics(y_val_tilt.to_numpy(), tilt_probs)
-    impact_metrics = regression_metrics(y_val_impact.to_numpy(), impact_preds)
+    win_policy = choose_threshold_policy(
+        y_val_win.to_numpy(),
+        win_probs,
+        thresholds=np.arange(0.20, 0.86, 0.05).tolist(),
+        min_precision=args.win_policy_min_precision,
+        min_recall=args.win_policy_min_recall,
+    )
+    tilt_policy = choose_threshold_policy(
+        y_val_tilt.to_numpy(),
+        tilt_probs,
+        thresholds=np.arange(0.10, 0.81, 0.05).tolist(),
+        min_precision=args.tilt_policy_min_precision,
+        min_recall=args.tilt_policy_min_recall,
+    )
 
-    win_threshold_rows = threshold_table(y_val_win.to_numpy(), win_probs, [0.3, 0.4, 0.5, 0.6, 0.7])
-    tilt_threshold_rows = threshold_table(y_val_tilt.to_numpy(), tilt_probs, [0.2, 0.3, 0.4, 0.5, 0.6])
+    win_metrics = binary_metrics(y_val_win.to_numpy(), win_probs, threshold=win_policy.threshold)
+    tilt_metrics = binary_metrics(y_val_tilt.to_numpy(), tilt_probs, threshold=tilt_policy.threshold)
+    impact_metrics = regression_metrics(y_val_impact.to_numpy(), impact_preds)
+    win_metrics["ece"] = expected_calibration_error(y_val_win.to_numpy(), win_probs)
+    tilt_metrics["ece"] = expected_calibration_error(y_val_tilt.to_numpy(), tilt_probs)
+
+    win_threshold_candidates = sorted({0.2, 0.3, 0.4, 0.5, 0.6, 0.7, round(win_policy.threshold, 4)})
+    tilt_threshold_candidates = sorted({0.1, 0.2, 0.3, 0.4, 0.5, 0.6, round(tilt_policy.threshold, 4)})
+    win_threshold_rows = with_selected_threshold(
+        threshold_table(y_val_win.to_numpy(), win_probs, win_threshold_candidates),
+        win_policy.threshold,
+    )
+    tilt_threshold_rows = with_selected_threshold(
+        threshold_table(y_val_tilt.to_numpy(), tilt_probs, tilt_threshold_candidates),
+        tilt_policy.threshold,
+    )
     win_calibration_rows = calibration_table(y_val_win.to_numpy(), win_probs, bins=10)
     tilt_calibration_rows = calibration_table(y_val_tilt.to_numpy(), tilt_probs, bins=10)
-
-    win_top_pos, win_top_neg = top_coefficients(win_model)
-    tilt_top_pos, tilt_top_neg = top_coefficients(tilt_model)
-    impact_top_pos, impact_top_neg = top_coefficients(impact_model)
 
     folds = build_temporal_folds(
         df,
@@ -1109,17 +1748,38 @@ def main() -> int:
     tilt_backtest_rows = temporal_backtest_rows(folds, "tilt", tilt_numeric, tilt_cat)
     impact_backtest_rows = temporal_backtest_rows(folds, "impact", impact_numeric, impact_cat)
 
+    win_top_features = top_feature_effects(
+        win_model,
+        x_val_win,
+        y_val_win.to_numpy(dtype=int),
+        is_classification=True,
+    )
+    tilt_top_features = top_feature_effects(
+        tilt_model,
+        x_val_tilt,
+        y_val_tilt.to_numpy(dtype=int),
+        is_classification=True,
+    )
+    impact_top_features = top_feature_effects(
+        impact_model,
+        x_val_impact,
+        y_val_impact.to_numpy(dtype=float),
+        is_classification=False,
+    )
+
     win_segment_rows = classification_metrics_by_segment(
         y_true=y_val_win.to_numpy(dtype=int),
         probs=win_probs,
         segments=val_df["momentum_label"],
         segment_name="momentum_label",
+        threshold=win_policy.threshold,
     )
     tilt_segment_rows = classification_metrics_by_segment(
         y_true=y_val_tilt.to_numpy(dtype=int),
         probs=tilt_probs,
         segments=val_df["momentum_label"],
         segment_name="momentum_label",
+        threshold=tilt_policy.threshold,
     )
     impact_segment_rows = regression_metrics_by_segment(
         y_true=y_val_impact.to_numpy(dtype=float),
@@ -1135,28 +1795,84 @@ def main() -> int:
         "impact_percentile_baseline": impact_metrics,
         "tilt_risk_baseline": tilt_metrics,
     }
+    promotion_gate_rows, promotion_ready_by_model = build_promotion_gates(
+        win_metrics=win_metrics,
+        impact_metrics=impact_metrics,
+        tilt_metrics=tilt_metrics,
+        win_backtest_rows=win_backtest_rows,
+        impact_backtest_rows=impact_backtest_rows,
+        tilt_backtest_rows=tilt_backtest_rows,
+        win_min_f1=args.gate_win_min_f1,
+        win_max_brier=args.gate_win_max_brier,
+        win_min_fold_f1=args.gate_win_min_fold_f1,
+        impact_max_rmse=args.gate_impact_max_rmse,
+        impact_max_mae=args.gate_impact_max_mae,
+        impact_max_fold_rmse=args.gate_impact_max_fold_rmse,
+        tilt_min_f1=args.gate_tilt_min_f1,
+        tilt_max_brier=args.gate_tilt_max_brier,
+        tilt_min_recall=args.gate_tilt_min_recall,
+        tilt_max_fold_f1_std=args.gate_tilt_max_fold_f1_std,
+    )
 
     model_bundle = [
-        ("win_probability_baseline", win_model, "classification", win_metrics, "Win calibration included in report."),
-        ("impact_percentile_baseline", impact_model, "regression", impact_metrics, "Ridge baseline with strong regularisation."),
+        (
+            "win_probability_baseline",
+            win_model,
+            "classification",
+            win_metrics,
+            f"Calibrated win probabilities; operating threshold={win_policy.threshold:.2f}; promotion_ready={promotion_ready_by_model['win_probability_baseline']}.",
+        ),
+        (
+            "impact_percentile_baseline",
+            impact_model,
+            "regression",
+            impact_metrics,
+            f"Non-linear impact baseline; promotion_ready={promotion_ready_by_model['impact_percentile_baseline']}.",
+        ),
         (
             "tilt_risk_baseline",
             tilt_model,
             "classification",
             tilt_metrics,
-            "Trained with class_weight=balanced; calibration table included in report.",
+            f"Calibrated tilt probabilities; operating threshold={tilt_policy.threshold:.2f}; promotion_ready={promotion_ready_by_model['tilt_risk_baseline']}.",
         ),
     ]
 
     ensure_validation_metrics_table(trino)
     validation_metrics_rows_by_model: Dict[str, List[Dict[str, Any]]] = {
-        "win_probability_baseline": classification_daily_metrics_rows(val_df, y_val_win, win_probs),
-        "tilt_risk_baseline": classification_daily_metrics_rows(val_df, y_val_tilt, tilt_probs),
+        "win_probability_baseline": classification_daily_metrics_rows(
+            val_df,
+            y_val_win,
+            win_probs,
+            threshold=win_policy.threshold,
+        ),
+        "tilt_risk_baseline": classification_daily_metrics_rows(
+            val_df,
+            y_val_tilt,
+            tilt_probs,
+            threshold=tilt_policy.threshold,
+        ),
         "impact_percentile_baseline": regression_daily_metrics_rows(val_df, y_val_impact, impact_preds),
     }
 
     trained_at = utc_now_iso()
     for model_name, model_obj, task_type, metrics, notes in model_bundle:
+        model_gate_rows = [row for row in promotion_gate_rows if row["model_name"] == model_name]
+        threshold_policy_payload: Dict[str, Any] | None = None
+        if model_name == "win_probability_baseline":
+            threshold_policy_payload = {
+                "threshold": win_policy.threshold,
+                "min_precision": win_policy.min_precision,
+                "min_recall": win_policy.min_recall,
+                "selected_by_constraints": win_policy.selected_by_constraints,
+            }
+        elif model_name == "tilt_risk_baseline":
+            threshold_policy_payload = {
+                "threshold": tilt_policy.threshold,
+                "min_precision": tilt_policy.min_precision,
+                "min_recall": tilt_policy.min_recall,
+                "selected_by_constraints": tilt_policy.selected_by_constraints,
+            }
         model_dir = artifact_root / snapshot_id / model_name / args.model_version
         ensure_dir(model_dir)
         model_path = model_dir / "model.joblib"
@@ -1173,6 +1889,9 @@ def main() -> int:
                 "metrics": metrics,
                 "train_rows": int(len(train_df)),
                 "validation_rows": int(len(val_df)),
+                "threshold_policy": threshold_policy_payload,
+                "promotion_ready": promotion_ready_by_model.get(model_name, False),
+                "promotion_gates": model_gate_rows,
             },
         )
         register_model(
@@ -1202,22 +1921,22 @@ def main() -> int:
         train_df=train_df,
         val_df=val_df,
         metric_by_model=metric_by_model,
+        win_threshold_policy=win_policy,
+        tilt_threshold_policy=tilt_policy,
         win_threshold_rows=win_threshold_rows,
         tilt_threshold_rows=tilt_threshold_rows,
         win_calibration_rows=win_calibration_rows,
         tilt_calibration_rows=tilt_calibration_rows,
-        win_top_pos=win_top_pos,
-        win_top_neg=win_top_neg,
-        tilt_top_pos=tilt_top_pos,
-        tilt_top_neg=tilt_top_neg,
-        impact_top_pos=impact_top_pos,
-        impact_top_neg=impact_top_neg,
+        win_top_features=win_top_features,
+        tilt_top_features=tilt_top_features,
+        impact_top_features=impact_top_features,
         win_backtest_rows=win_backtest_rows,
         tilt_backtest_rows=tilt_backtest_rows,
         impact_backtest_rows=impact_backtest_rows,
         win_segment_rows=win_segment_rows,
         tilt_segment_rows=tilt_segment_rows,
         impact_segment_rows=impact_segment_rows,
+        promotion_gate_rows=promotion_gate_rows,
     )
 
     print(f"Snapshot: {snapshot_id}")
@@ -1241,6 +1960,9 @@ def main() -> int:
         ),
     )
     print(f"Temporal folds evaluated: {len(folds)}")
+    print("Promotion readiness:", json.dumps(promotion_ready_by_model, sort_keys=True))
+    failed_gates = [row for row in promotion_gate_rows if row["status"] != "PASS"]
+    print(f"Promotion gate failures: {len(failed_gates)}")
     print(f"Report: {report_path}")
     print(f"Artifacts root: {artifact_root}")
     return 0

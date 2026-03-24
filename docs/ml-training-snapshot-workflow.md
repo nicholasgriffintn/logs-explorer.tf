@@ -81,7 +81,10 @@ Training guards:
 
 - win and impact baselines use pre-match form/context features only
 - leakage-prone outcome proxy features are blocked in trainer feature selection
+- feature quality controls bucket rare maps and clip numeric outliers using train-only statistics
+- win and tilt probabilities are calibrated and scored at an explicit operating threshold policy
 - temporal backtesting fold results are published in the offline evaluation report
+- promotion gate checks are emitted in the report and model metadata for each candidate
 
 ## Stage promotion and rollback
 
@@ -94,6 +97,14 @@ TO_STAGE=staging \
 CHANGED_BY=ml_engineer \
 CHANGE_REASON="passes offline checks" \
 infra/trino/queries/ml/run_ml_model_stage_transition.sh
+```
+
+Validate gates manually before promotion (optional, stage transition enforces this by default):
+
+```bash
+MODEL_NAME=win_probability_baseline \
+MODEL_VERSION=v1.0.0 \
+infra/trino/queries/ml/run_ml_promotion_gate_check.sh
 ```
 
 Rollback to prior version:
