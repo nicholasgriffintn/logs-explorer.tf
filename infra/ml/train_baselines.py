@@ -156,7 +156,6 @@ SELECT
   label_tilt
 FROM tf2.default.ml_training_player_match
 WHERE snapshot_id = '{sql_escape(snapshot_id)}'
-ORDER BY match_time
 """.strip()
     df = trino.fetch_df(sql)
     if df.empty:
