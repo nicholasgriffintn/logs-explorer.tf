@@ -41,7 +41,7 @@ The ingest service is designed to avoid overloading `logs.tf` and to prevent sil
 - optional full-history mode with queue-chained pagination (`INGEST_BACKFILL_QUEUE`)
 - request spacing (`LOGS_TF_REQUEST_DELAY_MS`) and retry budget (`LOGS_TF_FETCH_RETRIES`)
 - retry queue for failed logs with exponential backoff
-- batched downstream writes (`PIPELINES_BATCH_SIZE`)
+- per-log downstream emission with record-capped sends (`PIPELINES_BATCH_SIZE`)
 - strict payload validation before emission
 
 This gives predictable API pressure, resumable ingestion, and safer long-running operation.

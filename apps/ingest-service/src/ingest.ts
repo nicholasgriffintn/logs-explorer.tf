@@ -3,10 +3,7 @@ import {
   extractPlayerSummaryRecords,
   normalizeLogRecord,
   parseLogDetailResponse,
-  type ChatMessageRecord,
   type LogsTfLogSummary,
-  type NormalizedLogRecord,
-  type PlayerSummaryRecord,
 } from "@logs-explorer/tf2-log-model";
 
 import { buildConfig } from "./lib/config";
@@ -43,30 +40,7 @@ export type {
 } from "./lib/types";
 export type { IngestEnv, IngestResult, IngestState, KeyValueStore, RunIngestOptions };
 
-interface PreparedLogItem {
-  summary: LogsTfLogSummary;
-  coreRecord: NormalizedLogRecord;
-  chatRecords: ChatMessageRecord[];
-  playerRecords: PlayerSummaryRecord[];
-}
-
 export { computeRetryDelayMs };
-
-function prepareBatchableRecords(
-  summaries: LogsTfLogSummary[],
-  recordsByLogId: Map<number, PreparedLogItem>,
-): PreparedLogItem[] {
-  const ordered: PreparedLogItem[] = [];
-
-  for (const summary of summaries) {
-    const prepared = recordsByLogId.get(summary.id);
-    if (prepared) {
-      ordered.push(prepared);
-    }
-  }
-
-  return ordered;
-}
 
 function assertRequiredBindings(env: IngestEnv): void {
   if (!env.TF2_LOGS_STREAM) {
@@ -98,7 +72,11 @@ export async function runIngest(
   const config = buildConfig(env);
   const state = await readState(env, nowIso);
 
-  console.log("Current ingest state", state);
+  console.log("Current ingest state", {
+    lastIngestedLogId: state.lastIngestedLogId,
+    failedLogs: Object.keys(state.failedLogs).length,
+    updatedAt: state.updatedAt,
+  });
 
   let newSummaries: LogsTfLogSummary[] = [];
   let retrySummaries: LogsTfLogSummary[] = [];
@@ -117,12 +95,18 @@ export async function runIngest(
     candidates = mergeCandidates(newSummaries, retrySummaries);
   }
 
-  const preparedByLogId = new Map<number, PreparedLogItem>();
-
   console.log(
     `Mode=${mode}. Fetched ${newSummaries.length} new summaries and ${retrySummaries.length} retry summaries, total ${candidates.length} candidates to process`,
     candidates.map((s) => s.id),
   );
+
+  let emittedCoreLogs = 0;
+  let emittedChatMessages = 0;
+  let emittedPlayerSummaries = 0;
+
+  if (!options.dryRun) {
+    console.log(`Emitting logs one at a time with per-send record cap ${config.pipelineBatchSize}`);
+  }
 
   for (const summary of candidates) {
     try {
@@ -133,70 +117,46 @@ export async function runIngest(
         config.requestDelayMs,
       );
       const detail = parseLogDetailResponse(rawDetail);
-      preparedByLogId.set(summary.id, {
-        summary,
-        coreRecord: normalizeLogRecord(summary, detail, nowIso),
-        chatRecords: extractChatMessageRecords(summary, detail, nowIso),
-        playerRecords: extractPlayerSummaryRecords(summary, detail, nowIso),
-      });
+      const coreRecord = normalizeLogRecord(summary, detail, nowIso);
+      const chatRecords = extractChatMessageRecords(summary, detail, nowIso);
+      const playerRecords = extractPlayerSummaryRecords(summary, detail, nowIso);
+
+      if (!options.dryRun) {
+        const emittedCoreForLog = await emitDatasetBatch(
+          "logs",
+          env,
+          [coreRecord],
+          config.pipelineBatchSize,
+        );
+        const emittedChatForLog = await emitDatasetBatch(
+          "chat",
+          env,
+          chatRecords,
+          config.pipelineBatchSize,
+        );
+        const emittedPlayersForLog = await emitDatasetBatch(
+          "players",
+          env,
+          playerRecords,
+          config.pipelineBatchSize,
+        );
+
+        emittedCoreLogs += emittedCoreForLog;
+        emittedChatMessages += emittedChatForLog;
+        emittedPlayerSummaries += emittedPlayersForLog;
+      }
+
+      if (!options.dryRun) {
+        clearFailure(state, summary.id);
+        state.lastIngestedLogId = Math.max(state.lastIngestedLogId, summary.id);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to fetch or parse log detail for log ${summary.id}: ${message}`);
+      console.error(`Failed to process log ${summary.id}: ${message}`);
       updateFailure(state, summary, message, nowEpochMs);
     }
 
     await sleep(config.requestDelayMs);
-  }
-
-  let emittedCoreLogs = 0;
-  let emittedChatMessages = 0;
-  let emittedPlayerSummaries = 0;
-
-  if (!options.dryRun) {
-    const preparedRecords = prepareBatchableRecords(candidates, preparedByLogId);
-
-    console.log(
-      `Prepared ${preparedRecords.length} records for emission, processing in batches of ${config.pipelineBatchSize}`,
-    );
-
-    for (let offset = 0; offset < preparedRecords.length; offset += config.pipelineBatchSize) {
-      const batchItems = preparedRecords.slice(offset, offset + config.pipelineBatchSize);
-
-      try {
-        emittedCoreLogs += await emitDatasetBatch(
-          "logs",
-          env,
-          batchItems.map((item) => item.coreRecord),
-        );
-        emittedChatMessages += await emitDatasetBatch(
-          "chat",
-          env,
-          batchItems.flatMap((item) => item.chatRecords),
-        );
-        emittedPlayerSummaries += await emitDatasetBatch(
-          "players",
-          env,
-          batchItems.flatMap((item) => item.playerRecords),
-        );
-
-        console.log(
-          `Successfully emitted batch of ${batchItems.length} logs (offset ${offset}). Total emitted so far: ${emittedCoreLogs} core logs, ${emittedChatMessages} chat messages, ${emittedPlayerSummaries} player summaries.`,
-        );
-
-        for (const item of batchItems) {
-          clearFailure(state, item.summary.id);
-          state.lastIngestedLogId = Math.max(state.lastIngestedLogId, item.summary.id);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-
-        console.error(`Failed to emit batch of logs (offset ${offset}): ${message}`);
-
-        for (const item of batchItems) {
-          updateFailure(state, item.summary, message, nowEpochMs);
-        }
-      }
-    }
   }
 
   state.updatedAt = nowIso;

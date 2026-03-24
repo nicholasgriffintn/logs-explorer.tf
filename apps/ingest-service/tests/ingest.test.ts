@@ -21,6 +21,26 @@ class MemoryStream<TRecord> {
   }
 }
 
+class FlakyMemoryStream<TRecord> extends MemoryStream<TRecord> {
+  private failedAttempts = 0;
+
+  constructor(
+    private readonly shouldFail: (records: TRecord[]) => boolean,
+    private readonly maxFailures = 1,
+  ) {
+    super();
+  }
+
+  async send(records: TRecord[]): Promise<void> {
+    if (this.shouldFail(records) && this.failedAttempts < this.maxFailures) {
+      this.failedAttempts += 1;
+      throw new Error("CF_PIPELINE_DURABLE_OBJECT_OVERLOADED: Too many requests");
+    }
+
+    await super.send(records);
+  }
+}
+
 function listPayload(logIds: number[]): unknown {
   return {
     success: true,
@@ -76,6 +96,18 @@ function detailPayload(logId: number): unknown {
   };
 }
 
+function detailPayloadWithChat(logId: number, chatCount: number): unknown {
+  const base = detailPayload(logId) as { chat?: unknown[] };
+  return {
+    ...base,
+    chat: Array.from({ length: chatCount }, (_, index) => ({
+      steamid: `[U:1:${index + 1}]`,
+      name: `Player ${index + 1}`,
+      msg: `message ${index + 1}`,
+    })),
+  };
+}
+
 function makeFetchStub(calls: string[]): typeof fetch {
   return async (input: RequestInfo | URL): Promise<Response> => {
     const url =
@@ -117,6 +149,29 @@ function makeFullHistoryFetchStub(calls: string[]): typeof fetch {
     const detailMatch = url.match(/\/log\/(\d+)$/);
     if (detailMatch) {
       return Response.json(detailPayload(Number(detailMatch[1])));
+    }
+
+    return new Response("not found", { status: 404 });
+  };
+}
+
+function makeFetchStubWithDetail(
+  calls: string[],
+  listLogIds: number[],
+  detailFactory: (logId: number) => unknown,
+): typeof fetch {
+  return async (input: RequestInfo | URL): Promise<Response> => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    calls.push(url);
+
+    if (url.includes("/log?")) {
+      return Response.json(listPayload(listLogIds));
+    }
+
+    const detailMatch = url.match(/\/log\/(\d+)$/);
+    if (detailMatch) {
+      return Response.json(detailFactory(Number(detailMatch[1])));
     }
 
     return new Response("not found", { status: 404 });
@@ -210,4 +265,60 @@ test("runIngest fails fast when required logs binding is missing", async () => {
       fetchFn: makeFetchStub([]),
     }),
   ).rejects.toThrow(/TF2_LOGS_STREAM/);
+});
+
+test("runIngest splits large per-log chat payloads into smaller sends", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+  const calls: string[] = [];
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const result = await runIngest(env, {
+    fetchFn: makeFetchStubWithDetail(calls, [4031052], (logId) => detailPayloadWithChat(logId, 25)),
+    now: new Date("2026-03-22T12:00:00.000Z"),
+  });
+
+  expect(result.emittedCoreLogs).toBe(1);
+  expect(result.emittedChatMessages).toBe(25);
+  expect(result.emittedPlayerSummaries).toBe(1);
+  expect(chatStream.batches.map((batch) => batch.length)).toEqual([10, 10, 5]);
+});
+
+test("runIngest retries transient pipeline overload errors", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new FlakyMemoryStream<unknown>(() => true, 1);
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const result = await runIngest(env, {
+    fetchFn: makeFetchStub([]),
+    now: new Date("2026-03-22T12:00:00.000Z"),
+  });
+
+  expect(result.emittedCoreLogs).toBe(2);
+  expect(result.failedLogs).toBe(0);
+  expect(logsStream.batches.flat()).toHaveLength(2);
 });
