@@ -471,9 +471,9 @@ def refresh_serving_player_match_deep_dive(spark: SparkSession, mode: str, refre
             ELSE 'low'
           END AS behaviour_risk_tier,
           CASE
-            WHEN COALESCE(rb.impact_index, 0.0) >= 0.3000 THEN 'elite'
-            WHEN COALESCE(rb.impact_index, 0.0) >= 0.2200 THEN 'strong'
-            WHEN COALESCE(rb.impact_index, 0.0) >= 0.1600 THEN 'average'
+            WHEN COALESCE(rb.impact_index, 0.0) >= 0.2400 THEN 'elite'
+            WHEN COALESCE(rb.impact_index, 0.0) >= 0.1800 THEN 'strong'
+            WHEN COALESCE(rb.impact_index, 0.0) >= 0.1300 THEN 'average'
             ELSE 'struggling'
           END AS impact_tier,
           CURRENT_TIMESTAMP() AS updated_at

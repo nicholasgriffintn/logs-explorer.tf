@@ -38,6 +38,7 @@ Contract rules:
 
 - Primary key is `steamid`.
 - One row per player with at least one observed match in `features_player_match`.
+- `momentum_label` uses calibrated cutoffs on `form_delta_impact`: `hot >= 0.016`, `cold <= -0.020`, otherwise `stable`.
 - Breaking changes require versioned table rollout (for example `serving_player_profiles_v2`).
 
 ## `serving_map_overview_daily`
@@ -55,6 +56,7 @@ Contract rules:
 
 - Composite key is `(map, match_date)`.
 - `match_date` is UTC date derived from source timestamp.
+- When rolling up `close_game_rate` and `blowout_rate` across rows, use game-weighted aggregation: `SUM(rate * games) / SUM(games)`.
 - Breaking schema updates require versioned table rollout.
 
 ## `serving_player_match_deep_dive`
@@ -74,6 +76,7 @@ Contract rules:
 
 - Composite key is `(logid, steamid)`.
 - Table is a serving projection of `features_player_match` and `features_player_recent_form`; it must not depend on raw `core` tables in dashboard paths.
+- `impact_tier` cutoffs are `elite >= 0.2400`, `strong >= 0.1800`, `average >= 0.1300`, else `struggling`.
 - Breaking schema updates require versioned table rollout.
 
 ## `serving_ml_model_registry`

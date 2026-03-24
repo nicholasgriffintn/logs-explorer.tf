@@ -31,8 +31,8 @@ map_rollup AS (
     AVG(avg_duration_minutes) AS avg_duration_minutes,
     AVG(avg_total_kills) AS avg_total_kills,
     AVG(avg_kills_per_minute) AS avg_kills_per_minute,
-    AVG(close_game_rate) AS close_game_rate,
-    AVG(blowout_rate) AS blowout_rate,
+    SUM(close_game_rate * games) / NULLIF(SUM(games), 0) AS close_game_rate,
+    SUM(blowout_rate * games) / NULLIF(SUM(games), 0) AS blowout_rate,
     AVG(avg_player_impact_index) AS avg_player_impact_index,
     AVG(avg_negative_chat_ratio) AS avg_negative_chat_ratio,
     AVG(tilt_signal_rate) AS tilt_signal_rate

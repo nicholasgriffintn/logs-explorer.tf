@@ -262,14 +262,14 @@ DASHBOARD_CHART_SPECS = {
             "metrics": [
               {
                 "expressionType": "SQL",
-                "sqlExpression": "AVG(close_game_rate)",
-                "label": "Avg Close Game Rate",
+                "sqlExpression": "SUM(close_game_rate * games) / NULLIF(SUM(games), 0)",
+                "label": "Game-Weighted Close Game Rate",
                 "hasCustomLabel": True,
               },
               {
                 "expressionType": "SQL",
-                "sqlExpression": "AVG(blowout_rate)",
-                "label": "Avg Blowout Rate",
+                "sqlExpression": "SUM(blowout_rate * games) / NULLIF(SUM(games), 0)",
+                "label": "Game-Weighted Blowout Rate",
                 "hasCustomLabel": True,
               },
             ],

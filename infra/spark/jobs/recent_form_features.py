@@ -127,8 +127,8 @@ def create_recent_form_source_view(spark: SparkSession, mode: str, refresh_days:
           ROUND(rolling_10_avg_damage - career_avg_damage, 3) AS form_delta_damage,
           ROUND(rolling_10_avg_impact - career_avg_impact, 4) AS form_delta_impact,
           CASE
-            WHEN (rolling_10_avg_impact - career_avg_impact) >= 0.05 THEN 'hot'
-            WHEN (rolling_10_avg_impact - career_avg_impact) <= -0.05 THEN 'cold'
+            WHEN (rolling_10_avg_impact - career_avg_impact) >= 0.016 THEN 'hot'
+            WHEN (rolling_10_avg_impact - career_avg_impact) <= -0.020 THEN 'cold'
             ELSE 'stable'
           END AS momentum_label
         FROM recent_form_scored
