@@ -4,16 +4,24 @@ This directory provides a local Superset instance for building dashboards from `
 
 ## Start Superset
 
-Start Trino first:
+Start Trino first and keep it running:
 
 ```bash
 docker compose -f infra/trino/docker-compose.yml up -d
 ```
 
-Build serving tables (including deep-dive + ML progress) before bootstrap:
+This is part of the main platform flow in `docs/data-platform-e2e-workflow.md`.
+
+Run Spark feature-serving pipeline before bootstrap:
 
 ```bash
-infra/trino/queries/run_refresh_pipeline.sh full
+infra/spark/run_feature_pipeline.sh incremental
+```
+
+If ML progress dashboards must be current, run ML refresh separately:
+
+```bash
+infra/spark/run_ml_pipeline.sh incremental
 ```
 
 Then start Superset:

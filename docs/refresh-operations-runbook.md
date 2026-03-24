@@ -1,70 +1,84 @@
 # Refresh operations runbook
 
-This runbook defines how we execute and recover the `core -> features -> serving` refresh pipeline.
+This runbook defines Spark processing operations and recovery.
+Feature-serving and ML are separate pipelines and can run on different schedules.
+For the full platform flow, see `docs/data-platform-e2e-workflow.md`.
 
 ## Prerequisites
 
-- Trino container is running:
+- Spark config exists at `infra/spark/spark.env` (or equivalent env exports).
+- Docker is running and can access the target network.
+
+## Pipeline entrypoints
+
+Feature-serving:
 
 ```bash
-docker compose -f infra/trino/docker-compose.yml up -d
-```
-
-- `tf2` catalog is configured (`infra/trino/catalog/tf2.properties`).
-
-## One command entrypoint
-
-Use the runner script for both full and incremental refreshes:
-
-```bash
-infra/trino/queries/run_refresh_pipeline.sh incremental
+infra/spark/run_feature_pipeline.sh incremental
 ```
 
 ```bash
-infra/trino/queries/run_refresh_pipeline.sh full
+infra/spark/run_feature_pipeline.sh full
+```
+
+ML:
+
+```bash
+infra/spark/run_ml_pipeline.sh incremental
+```
+
+```bash
+infra/spark/run_ml_pipeline.sh full
+```
+
+Combined (optional):
+
+```bash
+infra/spark/run_processing_pipeline.sh incremental all
 ```
 
 Optional environment overrides:
 
-- `TRINO_CONTAINER`: non-default container name (default `tf2-trino`)
-- `RUN_ID`: explicit run identifier
+- `SPARK_ENV_FILE`: config file path (default empty; env vars can be exported directly)
+- `SPARK_NETWORK`: Docker network name (default `logs-explorer`)
+- `SPARK_IMAGE`: image tag (default `logs-explorer-spark-processing:latest`)
+- `REFRESH_DAYS`: rolling window for incremental mode (default `7`)
 
-## Mode selection
+## Execution contract
 
-- `incremental` (default): rewrites a rolling 7-day window in `features_player_match`, `serving_map_overview_daily`, and `serving_player_match_deep_dive`; recomputes full history for changed players in `features_player_recent_form` and `serving_player_profiles`; materialises the latest training snapshot (`25`); refreshes ML serving progress tables.
-- `full`: drops and rebuilds feature/serving tables from full core history using scripts `11` to `14`, `25`, `27`, and `29` (plus model registry table guard from `26`).
+- Spark owns all refresh/materialisation for `features_*`, `serving_*`, and ML tables.
+- Trino is query and dashboard serving only.
 
-Use `full` for first-time setup, backfills, and schema-repair events.
-Use `incremental` for routine daily refreshes.
+## Recommended cadence
+
+- Feature-serving pipeline: frequent (hourly/daily).
+- ML pipeline: separate cadence (daily/weekly or triggered by model lifecycle windows).
 
 ## Quality gate
 
-The runner executes `19_data_quality_checks.sql` after refresh.
-If any check returns `FAIL`, the runner exits non-zero and records failure metadata.
+Run serving quality checks after feature-serving pipeline execution:
 
-For ML-specific readiness checks, run:
+```bash
+docker exec -i tf2-trino trino < infra/trino/queries/19_data_quality_checks.sql
+```
+
+Run ML readiness checks after ML pipeline execution:
 
 ```bash
 infra/trino/queries/run_ml_readiness_check.sh
 ```
 
-To run baseline training from the latest snapshot and register candidate versions:
-
-```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
-```
-
-The command builds and runs the containerised trainer and updates:
-
-- `artifacts/ml/...` model files
-- `docs/ml-offline-evaluation-report.md`
-- `tf2.default.ml_model_registry` candidate rows
-
 ## Run metadata
 
-The runner writes step-level and pipeline-level status rows to:
+Spark writes step-level and pipeline-level status rows to:
 
 - `tf2.default.ops_pipeline_runs`
+
+Pipeline rows use step names:
+
+- `pipeline_feature_serving`
+- `pipeline_ml`
+- `pipeline_all` (combined runs)
 
 Useful queries:
 
@@ -91,6 +105,7 @@ SELECT
   MIN(started_at) AS pipeline_started_at,
   MAX(finished_at) AS pipeline_finished_at
 FROM tf2.default.ops_pipeline_runs
+WHERE step_name LIKE 'pipeline_%'
 GROUP BY run_id
 ORDER BY pipeline_started_at DESC
 LIMIT 20;
@@ -98,6 +113,6 @@ LIMIT 20;
 
 ## Recovery playbook
 
-- If incremental fails due to SQL/data issues, inspect `ops_pipeline_runs.error_text`, run the failed SQL script directly, then rerun incremental after fixing.
-- If failures persist or schemas drift, run `full` mode once, then rerun incremental to verify steady-state behaviour.
-- If quality checks fail, do not publish dashboard data; inspect failed rows from `19_data_quality_checks.sql`, repair, then rerun.
+- If incremental fails, inspect `ops_pipeline_runs.error_text`, fix root cause, rerun incremental.
+- If failures persist or schema drift is suspected, run `full` once, then rerun incremental.
+- If quality checks fail, do not publish dashboard updates; repair data issues and rerun.

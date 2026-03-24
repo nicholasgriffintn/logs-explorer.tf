@@ -89,7 +89,7 @@ For each baseline model, publish:
 
 ## Readiness check before training
 
-Run this before snapshot materialisation and training:
+Run this before ML pipeline snapshot materialisation and training:
 
 ```bash
 infra/trino/queries/run_ml_readiness_check.sh

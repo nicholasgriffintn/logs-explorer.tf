@@ -1,13 +1,16 @@
 # Trino analytics query pack
 
-These queries are designed for advanced TF2 analysis across players, games, and chat.
-They assume your Trino catalog is `tf2` and the tables are:
+These queries are designed for TF2 analysis and dashboard serving reads.
+Trino is query/serving only. Spark owns processing and refresh.
+
+## Source tables assumed
 
 - `tf2.default.logs`
 - `tf2.default.summaries`
 - `tf2.default.messages`
+- Spark-produced `features_*`, `serving_*`, and ML serving tables
 
-If your catalog namespace differs, replace the table references after running:
+If your catalog namespace differs, replace table references after running:
 
 ```sql
 SHOW SCHEMAS FROM tf2;
@@ -16,97 +19,52 @@ SHOW TABLES FROM tf2.default;
 
 ## Query index
 
-- `00_log_player_breakdown.sql`: one-log deep dive across all player IDs (default `4031015`)
+- `00_log_player_breakdown.sql`: one-log deep dive across all player IDs
 - `01_player_activity_baseline.sql`: per-player career baselines and win/KD/impact metrics
 - `02_player_form_and_momentum.sql`: per-game trendline for one player with rolling form stats
-- `03_player_relative_impact.sql`: one player's contribution relative to team totals by game
-- `04_player_pair_synergy.sql`: two-player synergy scores for duos (optionally anchor to one player)
+- `03_player_relative_impact.sql`: one player contribution relative to team totals by game
+- `04_player_pair_synergy.sql`: two-player synergy scores for duos
 - `05_head_to_head_two_players.sql`: direct comparison for two specific player IDs
-- `06_map_specialists.sql`: map-specific uplift versus each player's own baseline
+- `06_map_specialists.sql`: map-specific uplift versus each player baseline
 - `07_game_competitiveness_and_pace.sql`: map-level game quality and pace metrics
 - `08_class_usage_and_flexibility.sql`: class breadth and playstyle flexibility per player
 - `09_player_coplay_network.sql`: who a target player appears with and against most often
-- `10_sentiment_feature_export.sql`: feature export for a downstream sentiment/behaviour model
-- `11_build_features_player_match.sql`: build match-level feature table from `logs/messages/summaries`
-- `12_build_features_player_recent_form.sql`: build rolling form and momentum features per player
-- `13_build_serving_player_profiles.sql`: build serving table for per-player dashboard/profile reads
-- `14_build_serving_map_overview_daily.sql`: build serving table for map/day dashboard reads
-- `15_incremental_refresh_features_player_match.sql`: incremental refresh for match-level features
-- `16_incremental_refresh_features_player_recent_form.sql`: incremental refresh for rolling form features
-- `17_incremental_refresh_serving_player_profiles.sql`: incremental refresh for player profile serving rows
-- `18_incremental_refresh_serving_map_overview_daily.sql`: incremental refresh for map/day serving rows
+- `10_sentiment_feature_export.sql`: feature export for downstream sentiment/behaviour models
 - `19_data_quality_checks.sql`: quality gate checks with PASS/FAIL thresholds
-- `20_ops_pipeline_runs.sql`: run metadata table for refresh orchestration
-- `21_dashboard_player_profile_and_momentum.sql`: dashboard slice for one player profile and momentum trend context
+- `21_dashboard_player_profile_and_momentum.sql`: dashboard slice for player profile and momentum
 - `22_dashboard_map_competitiveness_and_pace.sql`: dashboard map ranking for competitiveness, pace, and activity
 - `23_dashboard_chat_behaviour_and_tilt_risk.sql`: dashboard summaries for chat behaviour and tilt risk
 - `24_serving_query_performance_benchmark.sql`: benchmark pack (`EXPLAIN ANALYZE`) for serving query latency checks
-- `25_build_ml_training_snapshot.sql`: materialise snapshot metadata + snapshot-scoped ML training dataset
-- `26_model_registry_tables.sql`: create lightweight model registry + stage history tables
-- `27_build_serving_player_match_deep_dive.sql`: build match-level deep-dive serving table for detailed player analysis
-- `28_incremental_refresh_serving_player_match_deep_dive.sql`: incremental refresh for deep-dive player-match serving rows
-- `29_build_serving_ml_progress.sql`: build ML progress serving tables (daily progress + model registry enrichment)
-- `30_incremental_refresh_serving_ml_progress.sql`: refresh ML progress serving tables for incremental runs
 - `31_dashboard_player_match_deep_dive.sql`: dashboard slice for deep player map/match analysis
 - `32_dashboard_ml_progress_and_registry.sql`: dashboard slices for ML pipeline progress and model registry status
-- `33_ml_data_readiness_check.sql`: ML data quality/readiness checks for feature completeness and label health
-- `run_ml_baseline_training.sh`: one command runner for baseline model training and registry upsert
-- `run_ml_readiness_check.sh`: one command runner for ML data readiness checks
-- `run_training_snapshot.sh`: one command runner for snapshot materialisation
-- `run_refresh_pipeline.sh`: one command runner for full/incremental refresh + quality checks
+- `33_ml_data_readiness_check.sql`: ML data quality/readiness checks
+- `run_ml_baseline_training.sh`: baseline model training + candidate registry upsert
+- `run_ml_readiness_check.sh`: one-command ML readiness checks
 
-## Usage notes
+## Processing and refresh
 
-- Queries include a `params` CTE when input is needed; replace sample Steam IDs and log IDs first.
-- Most queries include minimum-game thresholds; lower these if your dataset is still small.
-- These are written to run on full history; add date filters for faster iteration.
-
-## Full processing flow
-
-If you want to rebuild `features` and `serving` from full core history, run:
+Run Spark feature-serving processing before executing serving/dashboard queries:
 
 ```bash
-docker exec -i tf2-trino trino < infra/trino/queries/11_build_features_player_match.sql
-docker exec -i tf2-trino trino < infra/trino/queries/12_build_features_player_recent_form.sql
-docker exec -i tf2-trino trino < infra/trino/queries/25_build_ml_training_snapshot.sql
-docker exec -i tf2-trino trino < infra/trino/queries/13_build_serving_player_profiles.sql
-docker exec -i tf2-trino trino < infra/trino/queries/14_build_serving_map_overview_daily.sql
-docker exec -i tf2-trino trino < infra/trino/queries/27_build_serving_player_match_deep_dive.sql
-docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
-docker exec -i tf2-trino trino < infra/trino/queries/29_build_serving_ml_progress.sql
+infra/spark/run_feature_pipeline.sh incremental
 ```
 
-## Incremental processing flow
-
-If you want to refresh only changed windows/players, run:
+If you need ML snapshot/registry progress tables refreshed, run the ML pipeline separately:
 
 ```bash
-docker exec -i tf2-trino trino < infra/trino/queries/15_incremental_refresh_features_player_match.sql
-docker exec -i tf2-trino trino < infra/trino/queries/16_incremental_refresh_features_player_recent_form.sql
-docker exec -i tf2-trino trino < infra/trino/queries/25_build_ml_training_snapshot.sql
-docker exec -i tf2-trino trino < infra/trino/queries/17_incremental_refresh_serving_player_profiles.sql
-docker exec -i tf2-trino trino < infra/trino/queries/18_incremental_refresh_serving_map_overview_daily.sql
-docker exec -i tf2-trino trino < infra/trino/queries/28_incremental_refresh_serving_player_match_deep_dive.sql
-docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
-docker exec -i tf2-trino trino < infra/trino/queries/30_incremental_refresh_serving_ml_progress.sql
+infra/spark/run_ml_pipeline.sh incremental
+```
+
+Run serving quality checks after refresh:
+
+```bash
 docker exec -i tf2-trino trino < infra/trino/queries/19_data_quality_checks.sql
-```
-
-## Orchestrated runner
-
-Use the single entrypoint script to run refresh + checks in order and persist run metadata:
-
-```bash
-infra/trino/queries/run_refresh_pipeline.sh incremental
-```
-
-```bash
-infra/trino/queries/run_refresh_pipeline.sh full
 ```
 
 Operational details and failure recovery are documented in:
 
 - `/docs/refresh-operations-runbook.md`
+- `/docs/data-platform-e2e-workflow.md`
 
 ## Dashboard starter pack
 
@@ -120,54 +78,8 @@ docker exec -i tf2-trino trino < infra/trino/queries/31_dashboard_player_match_d
 docker exec -i tf2-trino trino < infra/trino/queries/32_dashboard_ml_progress_and_registry.sql
 ```
 
-Set query parameters in each file's `params` CTE before running.
+Set query parameters in each file `params` CTE before running.
 
 For Superset setup and Trino datasource wiring, use:
 
 - `/infra/superset/README.md`
-
-## Serving performance benchmark
-
-Run the benchmark pack to validate serving query latency targets:
-
-```bash
-docker exec -i tf2-trino trino < infra/trino/queries/24_serving_query_performance_benchmark.sql
-```
-
-## ML snapshot and registry
-
-Materialise a snapshot-scoped training dataset:
-
-```bash
-infra/trino/queries/run_training_snapshot.sh
-```
-
-Create model registry tables:
-
-```bash
-docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
-```
-
-Build ML progress serving tables:
-
-```bash
-docker exec -i tf2-trino trino < infra/trino/queries/29_build_serving_ml_progress.sql
-```
-
-Run ML data readiness checks:
-
-```bash
-infra/trino/queries/run_ml_readiness_check.sh
-```
-
-Train baseline models and register candidate versions:
-
-```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
-```
-
-The runner builds and executes the dedicated ML trainer image from `infra/ml/Dockerfile`,
-then writes:
-
-- model artefacts under `artifacts/ml/...`
-- an offline report at `docs/ml-offline-evaluation-report.md`

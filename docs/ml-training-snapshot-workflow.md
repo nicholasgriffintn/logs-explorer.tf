@@ -12,19 +12,25 @@ Snapshot IDs are deterministic per source cut-off (`max(match_time)`), so reruns
 
 ## Run the workflow
 
+Refresh feature tables first:
+
 ```bash
-infra/trino/queries/run_training_snapshot.sh
+infra/spark/run_feature_pipeline.sh incremental
 ```
 
-Optional environment override:
+Snapshots are built by the dedicated ML Spark pipeline:
 
-- `TRINO_CONTAINER`: non-default Trino container name (default `tf2-trino`)
+```bash
+infra/spark/run_ml_pipeline.sh incremental
+```
 
-The runner executes:
+or:
 
-- `infra/trino/queries/25_build_ml_training_snapshot.sql`
+```bash
+infra/spark/run_ml_pipeline.sh full
+```
 
-Then prints the latest snapshot metadata row.
+The pipeline step `ml_training_snapshot_refresh` materialises snapshot rows.
 
 ## Data included in training rows
 

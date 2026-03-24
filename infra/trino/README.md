@@ -50,4 +50,20 @@ Use the SQL files under `infra/trino/queries` for deeper analytics:
 - map specialisation and class flexibility
 - sentiment feature export for downstream modelling
 
+Before dashboard-serving queries, refresh Spark outputs:
+
+```bash
+infra/spark/run_feature_pipeline.sh incremental
+```
+
+Run ML pipeline separately when you need ML serving progress refreshed:
+
+```bash
+infra/spark/run_ml_pipeline.sh incremental
+```
+
 Entry point: `infra/trino/queries/README.md`.
+
+For the full ingest -> Spark -> Trino -> ML flow, use:
+
+- `docs/data-platform-e2e-workflow.md`

@@ -10,10 +10,10 @@ Use Iceberg-backed registry tables in `tf2.default` for V1:
 - `ml_model_registry`
 - `ml_model_stage_history`
 
-Create them with:
+Create them through the dedicated ML Spark pipeline:
 
 ```bash
-docker exec -i tf2-trino trino < infra/trino/queries/26_model_registry_tables.sql
+infra/spark/run_ml_pipeline.sh incremental
 ```
 
 Baseline training can populate candidate rows directly:
@@ -24,6 +24,8 @@ MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
 
 This command runs training in a dedicated container image so dependency updates are
 managed in one place (`infra/ml/Dockerfile`, `infra/ml/requirements.txt`).
+
+Run ML pipeline cadence independently from feature-serving cadence.
 
 ## Versioning rules
 

@@ -16,7 +16,8 @@ Non-contract tables (`core`, `features`) may evolve more quickly and should not 
 
 ## Freshness and publish policy
 
-- Refresh cadence: daily incremental refresh (or more often if required).
+- Refresh cadence: feature-serving Spark pipeline (`infra/spark/run_feature_pipeline.sh incremental`) daily or more often.
+- ML progress cadence: separate ML Spark pipeline (`infra/spark/run_ml_pipeline.sh incremental`) on its own schedule.
 - Publish gate: `19_data_quality_checks.sql` must be all `PASS`.
 - SLA target: serving query P95 under 3 seconds for dashboard slices.
 

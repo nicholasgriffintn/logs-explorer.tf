@@ -10,6 +10,7 @@ Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` 
 - `packages/tf2-log-model`: shared runtime validation + normalisation for logs list and detail payloads.
 - `infra/cloudflare/pipelines`: stream schema and setup instructions for Cloudflare Pipelines.
 - `infra/trino`: local Trino stack and catalog config template for querying R2 Data Catalog.
+- `infra/spark`: Spark processing pipelines for `features_*`, `serving_*`, and ML table materialisation.
 
 ## Setup
 
@@ -56,6 +57,8 @@ Follow:
 
 ## Analytics and dashboards
 
+- End-to-end data/ML run flow: `docs/data-platform-e2e-workflow.md`
+- Spark processing pipelines: `infra/spark/README.md`
 - Query index, starter queries, and run commands: `infra/trino/queries/README.md`
 - Superset dashboard workspace setup: `infra/superset/README.md`
 - Refresh operations and recovery guidance: `docs/refresh-operations-runbook.md`
@@ -63,7 +66,7 @@ Follow:
 
 ## Machine learning operations
 
-- ML snapshot workflow: `docs/ml-training-snapshot-workflow.md`
+- ML pipeline run and snapshot workflow: `docs/ml-training-snapshot-workflow.md`
 - Model registry policy: `docs/model-registry-and-versioning-policy.md`
 
 ## Development commands
