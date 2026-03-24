@@ -75,3 +75,32 @@ The training runner uses a dedicated Docker image and publishes:
 
 - model artefacts in `artifacts/ml/...`
 - an offline evaluation report in `docs/ml-offline-evaluation-report.md`
+- daily validation metrics in `tf2.default.ml_model_validation_metrics_daily`
+
+Training guards:
+
+- win and impact baselines use pre-match form/context features only
+- leakage-prone outcome proxy features are blocked in trainer feature selection
+- temporal backtesting fold results are published in the offline evaluation report
+
+## Stage promotion and rollback
+
+Promote a candidate:
+
+```bash
+MODEL_NAME=win_probability_baseline \
+MODEL_VERSION=v1.0.0 \
+TO_STAGE=staging \
+CHANGED_BY=ml_engineer \
+CHANGE_REASON="passes offline checks" \
+infra/trino/queries/ml/run_ml_model_stage_transition.sh
+```
+
+Rollback to prior version:
+
+```bash
+MODEL_NAME=win_probability_baseline \
+CHANGED_BY=ml_engineer \
+CHANGE_REASON="rollback after regression" \
+infra/trino/queries/ml/run_ml_model_rollback.sh
+```

@@ -65,8 +65,39 @@ Promotion flow:
 - write a stage transition row to `ml_model_stage_history` for every change
 - set `is_active = true` only for the current production version
 
+Use the stage transition helper for controlled promotions:
+
+```bash
+MODEL_NAME=win_probability_baseline \
+MODEL_VERSION=v1.0.1 \
+TO_STAGE=staging \
+CHANGED_BY=ml_engineer \
+CHANGE_REASON="passes offline checks" \
+infra/trino/queries/ml/run_ml_model_stage_transition.sh
+```
+
+Then promote to production:
+
+```bash
+MODEL_NAME=win_probability_baseline \
+MODEL_VERSION=v1.0.1 \
+TO_STAGE=production \
+CHANGED_BY=ml_engineer \
+CHANGE_REASON="approved for rollout" \
+infra/trino/queries/ml/run_ml_model_stage_transition.sh
+```
+
 ## Rollback policy
 
 - Keep at least one prior production model in `archived` or `staging` with valid artefact access.
 - Roll back by promoting the last known good version and recording the incident reason in stage history.
 - Never delete registry records; append-only history is required for auditability.
+
+Rollback helper:
+
+```bash
+MODEL_NAME=win_probability_baseline \
+CHANGED_BY=ml_engineer \
+CHANGE_REASON="rollback after quality regression" \
+infra/trino/queries/ml/run_ml_model_rollback.sh
+```

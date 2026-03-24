@@ -2,9 +2,24 @@
 -- Contract dependency: tf2.default.serving_player_match_deep_dive only.
 
 WITH params AS (
+  -- Set target_steamid to focus one player. Leave NULL to use most recently seen player.
   SELECT
-    CAST('76561197960435530' AS VARCHAR) AS target_steamid,
+    CAST(NULL AS VARCHAR) AS target_steamid,
     DATE_ADD('day', -60, CURRENT_DATE) AS start_date
+),
+resolved_params AS (
+  SELECT
+    COALESCE(
+      p.target_steamid,
+      (
+        SELECT steamid
+        FROM tf2.default.serving_player_profiles
+        ORDER BY last_seen_at DESC
+        LIMIT 1
+      )
+    ) AS target_steamid,
+    p.start_date
+  FROM params p
 ),
 recent_player_matches AS (
   SELECT
@@ -21,7 +36,7 @@ recent_player_matches AS (
     spmdd.impact_tier,
     spmdd.momentum_label
   FROM tf2.default.serving_player_match_deep_dive spmdd
-  CROSS JOIN params p
+  CROSS JOIN resolved_params p
   WHERE spmdd.steamid = p.target_steamid
     AND spmdd.match_date >= p.start_date
 ),

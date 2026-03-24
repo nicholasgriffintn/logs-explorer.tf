@@ -30,6 +30,7 @@ DATASETS = (
   "serving_player_match_deep_dive",
   "serving_ml_model_registry",
   "serving_ml_pipeline_progress_daily",
+  "serving_ml_prediction_quality_daily",
 )
 
 DASHBOARDS = (
@@ -38,6 +39,7 @@ DASHBOARDS = (
   "TF2 Chat Behaviour and Tilt Risk",
   "TF2 Player Match Deep Dive",
   "TF2 ML Progress and Registry",
+  "TF2 ML Prediction Quality",
 )
 
 SAVED_QUERY_FILES = (
@@ -46,6 +48,9 @@ SAVED_QUERY_FILES = (
   ("Chat Behaviour and Tilt Risk", "dashboard_chat_behaviour_and_tilt_risk.sql"),
   ("Player Match Deep Dive", "dashboard_player_match_deep_dive.sql"),
   ("ML Progress and Registry", "dashboard_ml_progress_and_registry.sql"),
+  ("ML Prediction Quality", "dashboard_ml_prediction_quality.sql"),
+  ("Player Synergy Network", "dashboard_player_synergy_network.sql"),
+  ("Map Tilt Anomalies", "dashboard_map_tilt_anomalies.sql"),
 )
 
 DASHBOARD_CHART_SPECS = {
@@ -749,6 +754,145 @@ DASHBOARD_CHART_SPECS = {
               "data_age_days",
             ],
             "row_limit": 300,
+          },
+        },
+      ],
+    },
+  ],
+  "TF2 ML Prediction Quality": [
+    {
+      "slice_name": "Prediction Quality Daily Snapshot",
+      "dataset": "serving_ml_prediction_quality_daily",
+      "layout_width": 12,
+      "layout_height": 56,
+      "variants": [
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "progress_date",
+              "model_name",
+              "model_version",
+              "task_type",
+              "stage",
+              "is_active",
+              "rows_total",
+              "precision",
+              "recall",
+              "f1",
+              "roc_auc",
+              "pr_auc",
+              "brier",
+              "rmse",
+              "mae",
+              "data_age_days",
+            ],
+            "row_limit": 300,
+          },
+        }
+      ],
+    },
+    {
+      "slice_name": "Classification Quality Trend",
+      "dataset": "serving_ml_prediction_quality_daily",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "echarts_timeseries_line",
+          "form_data": {
+            "query_mode": "aggregate",
+            "granularity_sqla": "progress_date",
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "since": "180 days ago",
+            "until": "now",
+            "groupby": ["model_name", "model_version"],
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(f1)",
+                "label": "Avg F1",
+                "hasCustomLabel": True,
+              },
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(roc_auc)",
+                "label": "Avg ROC AUC",
+                "hasCustomLabel": True,
+              },
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "show_legend": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "progress_date",
+              "model_name",
+              "model_version",
+              "f1",
+              "roc_auc",
+              "pr_auc",
+              "brier",
+            ],
+            "row_limit": 400,
+          },
+        },
+      ],
+    },
+    {
+      "slice_name": "Regression Quality Trend",
+      "dataset": "serving_ml_prediction_quality_daily",
+      "layout_width": 12,
+      "layout_height": 50,
+      "variants": [
+        {
+          "viz_type": "echarts_timeseries_line",
+          "form_data": {
+            "query_mode": "aggregate",
+            "granularity_sqla": "progress_date",
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "since": "180 days ago",
+            "until": "now",
+            "groupby": ["model_name", "model_version"],
+            "metrics": [
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(rmse)",
+                "label": "Avg RMSE",
+                "hasCustomLabel": True,
+              },
+              {
+                "expressionType": "SQL",
+                "sqlExpression": "AVG(mae)",
+                "label": "Avg MAE",
+                "hasCustomLabel": True,
+              },
+            ],
+            "adhoc_filters": [],
+            "row_limit": 5000,
+            "show_legend": True,
+          },
+        },
+        {
+          "viz_type": "table",
+          "form_data": {
+            "query_mode": "raw",
+            "all_columns": [
+              "progress_date",
+              "model_name",
+              "model_version",
+              "rmse",
+              "mae",
+            ],
+            "row_limit": 400,
           },
         },
       ],

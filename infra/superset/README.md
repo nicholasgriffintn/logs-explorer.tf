@@ -24,6 +24,12 @@ If ML progress dashboards must be current, run ML refresh separately:
 infra/spark/run_ml_pipeline.sh incremental
 ```
 
+If prediction-quality dashboards must be current, run baseline training before bootstrap:
+
+```bash
+MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
+```
+
 Then start Superset:
 
 ```bash
@@ -58,6 +64,7 @@ Bootstrap also creates datasets:
 - `serving_player_match_deep_dive`
 - `serving_ml_model_registry`
 - `serving_ml_pipeline_progress_daily`
+- `serving_ml_prediction_quality_daily`
 
 And creates:
 
@@ -66,11 +73,15 @@ And creates:
 - dashboard shell: chat behaviour and tilt risk
 - dashboard shell: player match deep dive
 - dashboard shell: ML progress and registry
+- dashboard shell: ML prediction quality
 - saved query source: `infra/trino/queries/dashboard/dashboard_player_profile_and_momentum.sql`
 - saved query source: `infra/trino/queries/dashboard/dashboard_map_competitiveness_and_pace.sql`
 - saved query source: `infra/trino/queries/dashboard/dashboard_chat_behaviour_and_tilt_risk.sql`
 - saved query source: `infra/trino/queries/dashboard/dashboard_player_match_deep_dive.sql`
 - saved query source: `infra/trino/queries/dashboard/dashboard_ml_progress_and_registry.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_ml_prediction_quality.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_player_synergy_network.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_map_tilt_anomalies.sql`
 
 To run bootstrap again manually:
 

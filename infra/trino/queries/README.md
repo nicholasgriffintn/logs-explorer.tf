@@ -40,6 +40,9 @@ Dashboard (`infra/trino/queries/dashboard`):
 - `dashboard_chat_behaviour_and_tilt_risk.sql`
 - `dashboard_player_match_deep_dive.sql`
 - `dashboard_ml_progress_and_registry.sql`
+- `dashboard_ml_prediction_quality.sql`
+- `dashboard_player_synergy_network.sql`
+- `dashboard_map_tilt_anomalies.sql`
 
 Quality (`infra/trino/queries/quality`):
 
@@ -55,6 +58,8 @@ ML (`infra/trino/queries/ml`):
 - `ml_data_readiness_check.sql`: ML data quality/readiness checks
 - `run_ml_baseline_training.sh`: baseline model training + candidate registry upsert
 - `run_ml_readiness_check.sh`: one-command ML readiness checks
+- `run_ml_model_stage_transition.sh`: stage transition helper + history write
+- `run_ml_model_rollback.sh`: rollback helper to repromote a model version
 
 ## Processing and refresh
 
@@ -97,6 +102,9 @@ docker exec -i tf2-trino trino < infra/trino/queries/dashboard/dashboard_map_com
 docker exec -i tf2-trino trino < infra/trino/queries/dashboard/dashboard_chat_behaviour_and_tilt_risk.sql
 docker exec -i tf2-trino trino < infra/trino/queries/dashboard/dashboard_player_match_deep_dive.sql
 docker exec -i tf2-trino trino < infra/trino/queries/dashboard/dashboard_ml_progress_and_registry.sql
+docker exec -i tf2-trino trino < infra/trino/queries/dashboard/dashboard_ml_prediction_quality.sql
+docker exec -i tf2-trino trino < infra/trino/queries/dashboard/dashboard_player_synergy_network.sql
+docker exec -i tf2-trino trino < infra/trino/queries/dashboard/dashboard_map_tilt_anomalies.sql
 ```
 
 Set query parameters in each file `params` CTE before running.

@@ -2,7 +2,20 @@
 -- Contract dependency: tf2.default.serving_player_profiles only.
 
 WITH params AS (
-  SELECT CAST('76561197960435530' AS VARCHAR) AS target_steamid
+  -- Set target_steamid to focus one player. Leave NULL to use most recently seen player.
+  SELECT CAST(NULL AS VARCHAR) AS target_steamid
+),
+resolved_params AS (
+  SELECT COALESCE(
+    p.target_steamid,
+    (
+      SELECT steamid
+      FROM tf2.default.serving_player_profiles
+      ORDER BY last_seen_at DESC
+      LIMIT 1
+    )
+  ) AS target_steamid
+  FROM params p
 ),
 target AS (
   SELECT
@@ -22,7 +35,7 @@ target AS (
     spp.tilt_risk_rate,
     spp.updated_at
   FROM tf2.default.serving_player_profiles spp
-  JOIN params p
+  JOIN resolved_params p
     ON p.target_steamid = spp.steamid
 ),
 population AS (

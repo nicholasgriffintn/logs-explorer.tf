@@ -88,6 +88,46 @@ serving_ml_pipeline_progress_null_keys AS (
   FROM tf2.default.serving_ml_pipeline_progress_daily
   WHERE progress_date IS NULL
 ),
+serving_ml_prediction_quality_null_keys AS (
+  SELECT COUNT(*) AS row_count
+  FROM tf2.default.serving_ml_prediction_quality_daily
+  WHERE model_name IS NULL OR model_version IS NULL OR progress_date IS NULL
+),
+features_freshness AS (
+  SELECT
+    MAX(match_date) AS latest_match_date,
+    DATE_DIFF('day', MAX(match_date), CURRENT_DATE) AS freshness_days
+  FROM tf2.default.features_player_match
+),
+serving_freshness AS (
+  SELECT
+    MAX(match_date) AS latest_serving_match_date,
+    DATE_DIFF('day', MAX(match_date), CURRENT_DATE) AS freshness_days
+  FROM tf2.default.serving_player_match_deep_dive
+),
+serving_coverage AS (
+  SELECT
+    CAST((SELECT COUNT(*) FROM tf2.default.features_player_match) AS DOUBLE) AS feature_rows,
+    CAST((SELECT COUNT(*) FROM tf2.default.serving_player_match_deep_dive) AS DOUBLE) AS serving_rows
+),
+tilt_drift AS (
+  WITH dated AS (
+    SELECT
+      match_date,
+      CAST(possible_tilt_label AS DOUBLE) AS tilt_label
+    FROM tf2.default.features_player_match
+  )
+  SELECT
+    AVG(CASE WHEN match_date >= DATE_ADD('day', -7, CURRENT_DATE) THEN tilt_label END) AS recent_7d_tilt_rate,
+    AVG(
+      CASE
+        WHEN match_date >= DATE_ADD('day', -35, CURRENT_DATE)
+         AND match_date < DATE_ADD('day', -7, CURRENT_DATE)
+        THEN tilt_label
+      END
+    ) AS prior_28d_tilt_rate
+  FROM dated
+),
 checks AS (
   SELECT
     'core_logs_non_empty' AS check_name,
@@ -146,6 +186,57 @@ checks AS (
     '> 0 rows',
     'player match deep-dive serving table must contain rows'
   FROM serving_player_match_deep_dive
+
+  UNION ALL
+
+  SELECT
+    'features_player_match_freshness_days',
+    CASE WHEN freshness_days <= 2 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(freshness_days AS DOUBLE),
+    '<= 2 days',
+    'features match table should be refreshed recently'
+  FROM features_freshness
+
+  UNION ALL
+
+  SELECT
+    'serving_player_match_deep_dive_freshness_days',
+    CASE WHEN freshness_days <= 2 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(freshness_days AS DOUBLE),
+    '<= 2 days',
+    'serving deep-dive table should be refreshed recently'
+  FROM serving_freshness
+
+  UNION ALL
+
+  SELECT
+    'serving_vs_features_row_coverage',
+    CASE
+      WHEN feature_rows = 0 THEN 'FAIL'
+      WHEN serving_rows / feature_rows >= 0.98 THEN 'PASS'
+      ELSE 'FAIL'
+    END,
+    CASE
+      WHEN feature_rows = 0 THEN 0.0
+      ELSE serving_rows / feature_rows
+    END,
+    '>= 0.98 ratio',
+    'serving deep-dive coverage should stay close to feature row count'
+  FROM serving_coverage
+
+  UNION ALL
+
+  SELECT
+    'tilt_label_recent_drift_abs_delta',
+    CASE
+      WHEN recent_7d_tilt_rate IS NULL OR prior_28d_tilt_rate IS NULL THEN 'FAIL'
+      WHEN ABS(recent_7d_tilt_rate - prior_28d_tilt_rate) <= 0.0500 THEN 'PASS'
+      ELSE 'FAIL'
+    END,
+    ABS(recent_7d_tilt_rate - prior_28d_tilt_rate),
+    '<= 0.05 absolute delta',
+    'tilt signal drift should remain within expected bounds'
+  FROM tilt_drift
 
   UNION ALL
 
@@ -236,6 +327,16 @@ checks AS (
     '= 0 rows',
     'ml pipeline progress rows must have progress_date'
   FROM serving_ml_pipeline_progress_null_keys
+
+  UNION ALL
+
+  SELECT
+    'serving_ml_prediction_quality_null_keys',
+    CASE WHEN row_count = 0 THEN 'PASS' ELSE 'FAIL' END,
+    CAST(row_count AS DOUBLE),
+    '= 0 rows',
+    'prediction quality rows must have model identifiers and progress_date'
+  FROM serving_ml_prediction_quality_null_keys
 )
 SELECT
   check_name,

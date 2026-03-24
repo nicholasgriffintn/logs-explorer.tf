@@ -24,6 +24,7 @@ This will:
 - write artefacts under `artifacts/ml/...`
 - write `docs/ml-offline-evaluation-report.md`
 - upsert candidate rows into `tf2.default.ml_model_registry`
+- upsert daily validation quality rows into `tf2.default.ml_model_validation_metrics_daily`
 
 ## Useful overrides
 

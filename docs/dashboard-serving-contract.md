@@ -11,6 +11,7 @@ Contract tables:
 - `tf2.default.serving_player_match_deep_dive`
 - `tf2.default.serving_ml_model_registry`
 - `tf2.default.serving_ml_pipeline_progress_daily`
+- `tf2.default.serving_ml_prediction_quality_daily`
 
 Non-contract tables (`core`, `features`) may evolve more quickly and should not be direct dashboard dependencies.
 
@@ -111,6 +112,24 @@ Contract rules:
 - Primary key is `progress_date`.
 - Table is allowed to be sparse for dates with no ML or pipeline events.
 
+## `serving_ml_prediction_quality_daily`
+
+Grain: one row per model version and validation date (`model_name`, `model_version`, `progress_date`).
+
+Key columns:
+
+- **Model identity**: `model_name`, `model_version`, `task_type`, `snapshot_id`, `stage`, `is_active`
+- **Validation slice metadata**: `progress_date`, `rows_total`, `snapshot_cutoff_date`, `data_age_days`
+- **Classification quality**: `observed_positive_rate`, `predicted_positive_rate`, `precision`, `recall`, `f1`, `roc_auc`, `pr_auc`, `brier`
+- **Regression quality**: `rmse`, `mae`
+- **Metadata**: `updated_at`
+
+Contract rules:
+
+- Composite key is `(model_name, model_version, progress_date)`.
+- Classification models may have nullable regression fields, and regression models may have nullable classification fields.
+- Values are sourced from trainer-produced validation metrics and joined to registry stage metadata.
+
 ## Query guidance for dashboards
 
 - Always filter by time window first (`match_date`, `last_seen_at`).
@@ -126,6 +145,9 @@ Starter query pack:
 - `infra/trino/queries/dashboard/dashboard_chat_behaviour_and_tilt_risk.sql`
 - `infra/trino/queries/dashboard/dashboard_player_match_deep_dive.sql`
 - `infra/trino/queries/dashboard/dashboard_ml_progress_and_registry.sql`
+- `infra/trino/queries/dashboard/dashboard_ml_prediction_quality.sql`
+- `infra/trino/queries/dashboard/dashboard_player_synergy_network.sql`
+- `infra/trino/queries/dashboard/dashboard_map_tilt_anomalies.sql`
 
 ## Change management
 

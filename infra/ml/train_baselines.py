@@ -14,7 +14,7 @@ import json
 import os
 import pathlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Sequence, Tuple
 
 import joblib
@@ -59,6 +59,13 @@ class TrinoConfig:
     catalog: str
     schema: str
     http_scheme: str
+
+
+@dataclass
+class TemporalFold:
+    name: str
+    train_df: pd.DataFrame
+    val_df: pd.DataFrame
 
 
 class TrinoClient:
@@ -164,6 +171,37 @@ def split_time(df: pd.DataFrame, train_ratio: float) -> Tuple[pd.DataFrame, pd.D
     return ordered.iloc[:split_idx].copy(), ordered.iloc[split_idx:].copy()
 
 
+def build_temporal_folds(
+    df: pd.DataFrame,
+    min_train_rows: int = 20000,
+    min_val_rows: int = 5000,
+) -> List[TemporalFold]:
+    ordered = df.sort_values("match_time").reset_index(drop=True)
+    fold_windows = (
+        ("fold_60_10", 0.60, 0.10),
+        ("fold_70_10", 0.70, 0.10),
+        ("fold_80_20", 0.80, 0.20),
+    )
+    folds: List[TemporalFold] = []
+    n_rows = len(ordered)
+    for name, train_frac, val_frac in fold_windows:
+        train_end = int(n_rows * train_frac)
+        val_end = min(n_rows, train_end + int(n_rows * val_frac))
+        train_df = ordered.iloc[:train_end].copy()
+        val_df = ordered.iloc[train_end:val_end].copy()
+        if len(train_df) < min_train_rows or len(val_df) < min_val_rows:
+            continue
+        folds.append(TemporalFold(name=name, train_df=train_df, val_df=val_df))
+    return folds
+
+
+def assert_no_leakage_features(task_name: str, selected_features: Sequence[str], disallowed_features: set[str]) -> None:
+    overlap = sorted(set(selected_features).intersection(disallowed_features))
+    if overlap:
+        joined = ", ".join(overlap)
+        raise RuntimeError(f"{task_name} contains leakage-prone features: {joined}")
+
+
 def build_preprocessor(numeric_cols: Sequence[str], categorical_cols: Sequence[str]) -> ColumnTransformer:
     numeric = Pipeline(
         steps=[
@@ -246,12 +284,17 @@ def train_impact_model(
 def binary_metrics(y_true: np.ndarray, probs: np.ndarray, threshold: float = 0.5) -> Dict[str, float]:
     preds = (probs >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, preds, labels=[0, 1]).ravel()
+    roc_auc = float("nan")
+    pr_auc = float("nan")
+    if len(np.unique(y_true)) > 1:
+        roc_auc = float(roc_auc_score(y_true, probs))
+        pr_auc = float(average_precision_score(y_true, probs))
     return {
         "precision": float(precision_score(y_true, preds, zero_division=0)),
         "recall": float(recall_score(y_true, preds, zero_division=0)),
         "f1": float(f1_score(y_true, preds, zero_division=0)),
-        "roc_auc": float(roc_auc_score(y_true, probs)),
-        "pr_auc": float(average_precision_score(y_true, probs)),
+        "roc_auc": roc_auc,
+        "pr_auc": pr_auc,
         "brier": float(brier_score_loss(y_true, probs)),
         "true_negatives": float(tn),
         "false_positives": float(fp),
@@ -326,6 +369,134 @@ def top_coefficients(model: Pipeline, top_n: int = 12) -> Tuple[List[Tuple[str, 
     return pairs_sorted[:top_n], sorted(pairs, key=lambda x: x[1])[:top_n]
 
 
+def classification_metrics_by_segment(
+    y_true: np.ndarray,
+    probs: np.ndarray,
+    segments: pd.Series,
+    segment_name: str,
+    threshold: float = 0.5,
+    min_rows: int = 200,
+) -> List[Dict[str, Any]]:
+    scored = pd.DataFrame({"y_true": y_true, "probs": probs, "segment": segments})
+    rows: List[Dict[str, Any]] = []
+    for segment_value, segment_df in scored.groupby("segment", dropna=False):
+        if len(segment_df) < min_rows:
+            continue
+        metrics = binary_metrics(
+            segment_df["y_true"].to_numpy(dtype=int),
+            segment_df["probs"].to_numpy(dtype=float),
+            threshold=threshold,
+        )
+        rows.append(
+            {
+                segment_name: str(segment_value) if pd.notna(segment_value) else "null",
+                "rows": float(len(segment_df)),
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1": metrics["f1"],
+                "roc_auc": metrics["roc_auc"],
+                "pr_auc": metrics["pr_auc"],
+                "brier": metrics["brier"],
+                "positive_rate": metrics["positive_rate"],
+            }
+        )
+    return sorted(rows, key=lambda row: row["rows"], reverse=True)
+
+
+def regression_metrics_by_segment(
+    y_true: np.ndarray,
+    preds: np.ndarray,
+    segments: pd.Series,
+    segment_name: str,
+    min_rows: int = 200,
+) -> List[Dict[str, Any]]:
+    scored = pd.DataFrame({"y_true": y_true, "preds": preds, "segment": segments})
+    rows: List[Dict[str, Any]] = []
+    for segment_value, segment_df in scored.groupby("segment", dropna=False):
+        if len(segment_df) < min_rows:
+            continue
+        metrics = regression_metrics(
+            segment_df["y_true"].to_numpy(dtype=float),
+            segment_df["preds"].to_numpy(dtype=float),
+        )
+        rows.append(
+            {
+                segment_name: str(segment_value) if pd.notna(segment_value) else "null",
+                "rows": float(len(segment_df)),
+                "rmse": metrics["rmse"],
+                "mae": metrics["mae"],
+            }
+        )
+    return sorted(rows, key=lambda row: row["rows"], reverse=True)
+
+
+def temporal_backtest_rows(
+    folds: Sequence[TemporalFold],
+    model_kind: str,
+    numeric_cols: Sequence[str],
+    categorical_cols: Sequence[str],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    feature_cols = list(numeric_cols) + list(categorical_cols)
+    for fold in folds:
+        x_train = fold.train_df[feature_cols]
+        x_val = fold.val_df[feature_cols]
+        if model_kind == "win":
+            y_train = fold.train_df["label_win"].astype(int)
+            y_val = fold.val_df["label_win"].astype(int)
+            model = train_win_model(x_train, y_train, numeric_cols, categorical_cols)
+            probs = model.predict_proba(x_val)[:, 1]
+            metrics = binary_metrics(y_val.to_numpy(), probs)
+            rows.append(
+                {
+                    "fold": fold.name,
+                    "train_rows": float(len(fold.train_df)),
+                    "val_rows": float(len(fold.val_df)),
+                    "precision": metrics["precision"],
+                    "recall": metrics["recall"],
+                    "f1": metrics["f1"],
+                    "roc_auc": metrics["roc_auc"],
+                    "pr_auc": metrics["pr_auc"],
+                    "brier": metrics["brier"],
+                }
+            )
+        elif model_kind == "tilt":
+            y_train = fold.train_df["label_tilt"].astype(int)
+            y_val = fold.val_df["label_tilt"].astype(int)
+            model = train_tilt_model(x_train, y_train, numeric_cols, categorical_cols)
+            probs = model.predict_proba(x_val)[:, 1]
+            metrics = binary_metrics(y_val.to_numpy(), probs)
+            rows.append(
+                {
+                    "fold": fold.name,
+                    "train_rows": float(len(fold.train_df)),
+                    "val_rows": float(len(fold.val_df)),
+                    "precision": metrics["precision"],
+                    "recall": metrics["recall"],
+                    "f1": metrics["f1"],
+                    "roc_auc": metrics["roc_auc"],
+                    "pr_auc": metrics["pr_auc"],
+                    "brier": metrics["brier"],
+                }
+            )
+        else:
+            y_train = fold.train_df["label_impact_percentile"].astype(float)
+            y_val = fold.val_df["label_impact_percentile"].astype(float)
+            model = train_impact_model(x_train, y_train, numeric_cols, categorical_cols)
+            preds = np.clip(model.predict(x_val), 1.0, 100.0)
+            metrics = regression_metrics(y_val.to_numpy(), preds)
+            rows.append(
+                {
+                    "fold": fold.name,
+                    "train_rows": float(len(fold.train_df)),
+                    "val_rows": float(len(fold.val_df)),
+                    "rmse": metrics["rmse"],
+                    "mae": metrics["mae"],
+                }
+            )
+    return rows
+
+
 def ensure_dir(path: pathlib.Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
@@ -333,6 +504,186 @@ def ensure_dir(path: pathlib.Path) -> None:
 def write_json(path: pathlib.Path, payload: Dict[str, Any]) -> None:
     ensure_dir(path.parent)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def sql_literal(value: Any) -> str:
+    if value is None:
+        return "NULL"
+    if isinstance(value, (float, np.floating)) and np.isnan(value):
+        return "NULL"
+    if isinstance(value, (np.integer, int)):
+        return str(int(value))
+    if isinstance(value, (np.floating, float)):
+        return f"{float(value):.10f}"
+    if isinstance(value, pd.Timestamp):
+        if pd.isna(value):
+            return "NULL"
+        return f"DATE '{value.strftime('%Y-%m-%d')}'"
+    if isinstance(value, date):
+        return f"DATE '{value.isoformat()}'"
+    return f"'{sql_escape(str(value))}'"
+
+
+def ensure_validation_metrics_table(trino: TrinoClient) -> None:
+    trino.execute(
+        """
+CREATE TABLE IF NOT EXISTS tf2.default.ml_model_validation_metrics_daily (
+  model_name VARCHAR,
+  model_version VARCHAR,
+  task_type VARCHAR,
+  snapshot_id VARCHAR,
+  progress_date DATE,
+  rows_total BIGINT,
+  observed_positive_rate DOUBLE,
+  predicted_positive_rate DOUBLE,
+  precision DOUBLE,
+  recall DOUBLE,
+  f1 DOUBLE,
+  roc_auc DOUBLE,
+  pr_auc DOUBLE,
+  brier DOUBLE,
+  rmse DOUBLE,
+  mae DOUBLE,
+  created_at TIMESTAMP
+)
+""".strip()
+    )
+
+
+def upsert_validation_metrics_daily(
+    trino: TrinoClient,
+    model_name: str,
+    model_version: str,
+    task_type: str,
+    snapshot_id: str,
+    rows: Sequence[Dict[str, Any]],
+) -> None:
+    trino.execute(
+        f"""
+DELETE FROM tf2.default.ml_model_validation_metrics_daily
+WHERE model_name = '{sql_escape(model_name)}'
+  AND model_version = '{sql_escape(model_version)}'
+  AND snapshot_id = '{sql_escape(snapshot_id)}'
+""".strip()
+    )
+    if not rows:
+        return
+
+    values_sql: List[str] = []
+    for row in rows:
+        values_sql.append(
+            "("
+            + ", ".join(
+                [
+                    sql_literal(model_name),
+                    sql_literal(model_version),
+                    sql_literal(task_type),
+                    sql_literal(snapshot_id),
+                    sql_literal(row.get("progress_date")),
+                    sql_literal(row.get("rows_total")),
+                    sql_literal(row.get("observed_positive_rate")),
+                    sql_literal(row.get("predicted_positive_rate")),
+                    sql_literal(row.get("precision")),
+                    sql_literal(row.get("recall")),
+                    sql_literal(row.get("f1")),
+                    sql_literal(row.get("roc_auc")),
+                    sql_literal(row.get("pr_auc")),
+                    sql_literal(row.get("brier")),
+                    sql_literal(row.get("rmse")),
+                    sql_literal(row.get("mae")),
+                    "CURRENT_TIMESTAMP",
+                ]
+            )
+            + ")"
+        )
+
+    trino.execute(
+        """
+INSERT INTO tf2.default.ml_model_validation_metrics_daily (
+  model_name,
+  model_version,
+  task_type,
+  snapshot_id,
+  progress_date,
+  rows_total,
+  observed_positive_rate,
+  predicted_positive_rate,
+  precision,
+  recall,
+  f1,
+  roc_auc,
+  pr_auc,
+  brier,
+  rmse,
+  mae,
+  created_at
+)
+VALUES
+"""
+        + ",\n".join(values_sql)
+    )
+
+
+def classification_daily_metrics_rows(
+    val_df: pd.DataFrame,
+    y_true: pd.Series,
+    probs: np.ndarray,
+    threshold: float = 0.5,
+) -> List[Dict[str, Any]]:
+    scored = val_df[["match_date"]].copy()
+    scored["y_true"] = y_true.to_numpy(dtype=int)
+    scored["probs"] = probs
+    scored["pred"] = (probs >= threshold).astype(int)
+    rows: List[Dict[str, Any]] = []
+    for progress_date, day_df in scored.groupby("match_date", dropna=False):
+        if pd.isna(progress_date):
+            continue
+        metrics = binary_metrics(day_df["y_true"].to_numpy(dtype=int), day_df["probs"].to_numpy(dtype=float))
+        rows.append(
+            {
+                "progress_date": progress_date,
+                "rows_total": int(len(day_df)),
+                "observed_positive_rate": metrics["positive_rate"],
+                "predicted_positive_rate": float(day_df["pred"].mean()),
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1": metrics["f1"],
+                "roc_auc": metrics["roc_auc"],
+                "pr_auc": metrics["pr_auc"],
+                "brier": metrics["brier"],
+                "rmse": None,
+                "mae": None,
+            }
+        )
+    return rows
+
+
+def regression_daily_metrics_rows(val_df: pd.DataFrame, y_true: pd.Series, preds: np.ndarray) -> List[Dict[str, Any]]:
+    scored = val_df[["match_date"]].copy()
+    scored["y_true"] = y_true.to_numpy(dtype=float)
+    scored["preds"] = preds
+    rows: List[Dict[str, Any]] = []
+    for progress_date, day_df in scored.groupby("match_date", dropna=False):
+        if pd.isna(progress_date):
+            continue
+        metrics = regression_metrics(day_df["y_true"].to_numpy(dtype=float), day_df["preds"].to_numpy(dtype=float))
+        rows.append(
+            {
+                "progress_date": progress_date,
+                "rows_total": int(len(day_df)),
+                "observed_positive_rate": None,
+                "predicted_positive_rate": None,
+                "precision": None,
+                "recall": None,
+                "f1": None,
+                "roc_auc": None,
+                "pr_auc": None,
+                "brier": None,
+                "rmse": metrics["rmse"],
+                "mae": metrics["mae"],
+            }
+        )
+    return rows
 
 
 def register_model(
@@ -423,6 +774,12 @@ def write_report(
     tilt_top_neg: List[Tuple[str, float]],
     impact_top_pos: List[Tuple[str, float]],
     impact_top_neg: List[Tuple[str, float]],
+    win_backtest_rows: List[Dict[str, Any]],
+    tilt_backtest_rows: List[Dict[str, Any]],
+    impact_backtest_rows: List[Dict[str, Any]],
+    win_segment_rows: List[Dict[str, Any]],
+    tilt_segment_rows: List[Dict[str, Any]],
+    impact_segment_rows: List[Dict[str, Any]],
 ) -> None:
     lines: List[str] = []
     lines.append("# ML offline evaluation report")
@@ -477,6 +834,44 @@ def write_report(
     ]
     lines.extend(format_table(impact_rows, ["model", "rmse", "mae"]))
     lines.append("")
+    lines.append("## Temporal backtesting")
+    lines.append("")
+    lines.append("### Win model folds")
+    lines.append("")
+    lines.extend(format_table(win_backtest_rows, ["fold", "train_rows", "val_rows", "precision", "recall", "f1", "roc_auc", "pr_auc", "brier"]))
+    lines.append("")
+    lines.append("### Tilt model folds")
+    lines.append("")
+    lines.extend(format_table(tilt_backtest_rows, ["fold", "train_rows", "val_rows", "precision", "recall", "f1", "roc_auc", "pr_auc", "brier"]))
+    lines.append("")
+    lines.append("### Impact model folds")
+    lines.append("")
+    lines.extend(format_table(impact_backtest_rows, ["fold", "train_rows", "val_rows", "rmse", "mae"]))
+    lines.append("")
+    lines.append("## Segment quality")
+    lines.append("")
+    lines.append("### Win model by momentum")
+    lines.append("")
+    lines.extend(
+        format_table(
+            win_segment_rows,
+            ["momentum_label", "rows", "precision", "recall", "f1", "roc_auc", "pr_auc", "brier", "positive_rate"],
+        )
+    )
+    lines.append("")
+    lines.append("### Tilt model by momentum")
+    lines.append("")
+    lines.extend(
+        format_table(
+            tilt_segment_rows,
+            ["momentum_label", "rows", "precision", "recall", "f1", "roc_auc", "pr_auc", "brier", "positive_rate"],
+        )
+    )
+    lines.append("")
+    lines.append("### Impact model by momentum")
+    lines.append("")
+    lines.extend(format_table(impact_segment_rows, ["momentum_label", "rows", "rmse", "mae"]))
+    lines.append("")
     lines.append("## Threshold trade-offs")
     lines.append("")
     lines.append("### Win model")
@@ -524,6 +919,12 @@ def write_report(
     lines.append("## Calibration notes")
     lines.append("")
     lines.append(
+        "- Win and impact models now use pre-match form/context features only; outcome-proxy leakage features are blocked at training time."
+    )
+    lines.append(
+        "- Temporal backtesting rows above should be treated as the baseline promotion signal, not a single split metric."
+    )
+    lines.append(
         f"- Win Brier score: `{metric_by_model['win_probability_baseline']['brier']:.4f}`. "
         "If production thresholding matters, tune threshold against business costs."
     )
@@ -553,6 +954,8 @@ def main() -> int:
     parser.add_argument("--report-path", default=os.environ.get("ML_REPORT_PATH", "docs/ml-offline-evaluation-report.md"))
     parser.add_argument("--training-code-version", default=os.environ.get("TRAINING_CODE_VERSION", "unknown"))
     parser.add_argument("--feature-sql-version", default=os.environ.get("FEATURE_SQL_VERSION", "unknown"))
+    parser.add_argument("--min-fold-train-rows", type=int, default=int(os.environ.get("MIN_FOLD_TRAIN_ROWS", "20000")))
+    parser.add_argument("--min-fold-val-rows", type=int, default=int(os.environ.get("MIN_FOLD_VAL_ROWS", "5000")))
     args = parser.parse_args()
 
     trino_cfg = TrinoConfig(
@@ -572,24 +975,24 @@ def main() -> int:
     if len(train_df) < 1000 or len(val_df) < 200:
         raise RuntimeError(f"Insufficient rows after split: train={len(train_df)} val={len(val_df)}")
 
-    common_numeric = [
-        "duration_seconds",
-        "team_score",
-        "opponent_score",
-        "score_delta",
-        "kills",
-        "assists",
-        "deaths",
-        "damage_dealt",
-        "healing_done",
-        "ubers_used",
-        "classes_played_count",
-        "kill_share_of_team",
-        "damage_share_of_team",
-        "healing_share_of_team",
-        "impact_index",
-        "damage_per_minute",
-        "kda_ratio",
+    win_numeric = [
+        "rolling_5_avg_kills",
+        "rolling_10_avg_damage",
+        "rolling_10_avg_impact",
+        "rolling_10_kda_ratio",
+        "rolling_10_win_rate",
+        "rolling_10_negative_chat_ratio",
+        "career_avg_kills",
+        "career_avg_damage",
+        "career_avg_impact",
+        "form_delta_kills",
+        "form_delta_damage",
+        "form_delta_impact",
+        "games_played_to_date",
+    ]
+    win_cat = ["map", "team", "momentum_label"]
+
+    impact_numeric = [
         "rolling_5_avg_kills",
         "rolling_10_avg_damage",
         "rolling_10_avg_impact",
@@ -603,7 +1006,7 @@ def main() -> int:
         "form_delta_impact",
         "games_played_to_date",
     ]
-    common_cat = ["map", "team", "momentum_label"]
+    impact_cat = ["map", "team", "momentum_label"]
 
     tilt_numeric = [
         "deaths",
@@ -622,8 +1025,51 @@ def main() -> int:
     ]
     tilt_cat = ["map", "team", "momentum_label"]
 
-    x_train_common = train_df[common_numeric + common_cat]
-    x_val_common = val_df[common_numeric + common_cat]
+    assert_no_leakage_features(
+        task_name="win_probability_baseline",
+        selected_features=win_numeric + win_cat,
+        disallowed_features={
+            "team_score",
+            "opponent_score",
+            "score_delta",
+            "kills",
+            "assists",
+            "deaths",
+            "damage_dealt",
+            "healing_done",
+            "ubers_used",
+            "kill_share_of_team",
+            "damage_share_of_team",
+            "healing_share_of_team",
+            "impact_index",
+            "damage_per_minute",
+            "kda_ratio",
+        },
+    )
+    assert_no_leakage_features(
+        task_name="impact_percentile_baseline",
+        selected_features=impact_numeric + impact_cat,
+        disallowed_features={
+            "kills",
+            "assists",
+            "deaths",
+            "damage_dealt",
+            "healing_done",
+            "ubers_used",
+            "kill_share_of_team",
+            "damage_share_of_team",
+            "healing_share_of_team",
+            "impact_index",
+            "damage_per_minute",
+            "kda_ratio",
+            "classes_played_count",
+        },
+    )
+
+    x_train_win = train_df[win_numeric + win_cat]
+    x_val_win = val_df[win_numeric + win_cat]
+    x_train_impact = train_df[impact_numeric + impact_cat]
+    x_val_impact = val_df[impact_numeric + impact_cat]
     x_train_tilt = train_df[tilt_numeric + tilt_cat]
     x_val_tilt = val_df[tilt_numeric + tilt_cat]
 
@@ -634,13 +1080,13 @@ def main() -> int:
     y_train_impact = train_df["label_impact_percentile"].astype(float)
     y_val_impact = val_df["label_impact_percentile"].astype(float)
 
-    win_model = train_win_model(x_train_common, y_train_win, common_numeric, common_cat)
+    win_model = train_win_model(x_train_win, y_train_win, win_numeric, win_cat)
     tilt_model = train_tilt_model(x_train_tilt, y_train_tilt, tilt_numeric, tilt_cat)
-    impact_model = train_impact_model(x_train_common, y_train_impact, common_numeric, common_cat)
+    impact_model = train_impact_model(x_train_impact, y_train_impact, impact_numeric, impact_cat)
 
-    win_probs = win_model.predict_proba(x_val_common)[:, 1]
+    win_probs = win_model.predict_proba(x_val_win)[:, 1]
     tilt_probs = tilt_model.predict_proba(x_val_tilt)[:, 1]
-    impact_preds = np.clip(impact_model.predict(x_val_common), 1.0, 100.0)
+    impact_preds = np.clip(impact_model.predict(x_val_impact), 1.0, 100.0)
 
     win_metrics = binary_metrics(y_val_win.to_numpy(), win_probs)
     tilt_metrics = binary_metrics(y_val_tilt.to_numpy(), tilt_probs)
@@ -654,6 +1100,34 @@ def main() -> int:
     win_top_pos, win_top_neg = top_coefficients(win_model)
     tilt_top_pos, tilt_top_neg = top_coefficients(tilt_model)
     impact_top_pos, impact_top_neg = top_coefficients(impact_model)
+
+    folds = build_temporal_folds(
+        df,
+        min_train_rows=args.min_fold_train_rows,
+        min_val_rows=args.min_fold_val_rows,
+    )
+    win_backtest_rows = temporal_backtest_rows(folds, "win", win_numeric, win_cat)
+    tilt_backtest_rows = temporal_backtest_rows(folds, "tilt", tilt_numeric, tilt_cat)
+    impact_backtest_rows = temporal_backtest_rows(folds, "impact", impact_numeric, impact_cat)
+
+    win_segment_rows = classification_metrics_by_segment(
+        y_true=y_val_win.to_numpy(dtype=int),
+        probs=win_probs,
+        segments=val_df["momentum_label"],
+        segment_name="momentum_label",
+    )
+    tilt_segment_rows = classification_metrics_by_segment(
+        y_true=y_val_tilt.to_numpy(dtype=int),
+        probs=tilt_probs,
+        segments=val_df["momentum_label"],
+        segment_name="momentum_label",
+    )
+    impact_segment_rows = regression_metrics_by_segment(
+        y_true=y_val_impact.to_numpy(dtype=float),
+        preds=impact_preds,
+        segments=val_df["momentum_label"],
+        segment_name="momentum_label",
+    )
 
     artifact_root = pathlib.Path(args.artifact_root).resolve()
     report_path = pathlib.Path(args.report_path).resolve()
@@ -674,6 +1148,13 @@ def main() -> int:
             "Trained with class_weight=balanced; calibration table included in report.",
         ),
     ]
+
+    ensure_validation_metrics_table(trino)
+    validation_metrics_rows_by_model: Dict[str, List[Dict[str, Any]]] = {
+        "win_probability_baseline": classification_daily_metrics_rows(val_df, y_val_win, win_probs),
+        "tilt_risk_baseline": classification_daily_metrics_rows(val_df, y_val_tilt, tilt_probs),
+        "impact_percentile_baseline": regression_daily_metrics_rows(val_df, y_val_impact, impact_preds),
+    }
 
     trained_at = utc_now_iso()
     for model_name, model_obj, task_type, metrics, notes in model_bundle:
@@ -707,6 +1188,14 @@ def main() -> int:
             metrics=metrics,
             calibration_notes=notes,
         )
+        upsert_validation_metrics_daily(
+            trino=trino,
+            model_name=model_name,
+            model_version=args.model_version,
+            task_type=task_type,
+            snapshot_id=snapshot_id,
+            rows=validation_metrics_rows_by_model.get(model_name, []),
+        )
 
     write_report(
         path=report_path,
@@ -724,6 +1213,12 @@ def main() -> int:
         tilt_top_neg=tilt_top_neg,
         impact_top_pos=impact_top_pos,
         impact_top_neg=impact_top_neg,
+        win_backtest_rows=win_backtest_rows,
+        tilt_backtest_rows=tilt_backtest_rows,
+        impact_backtest_rows=impact_backtest_rows,
+        win_segment_rows=win_segment_rows,
+        tilt_segment_rows=tilt_segment_rows,
+        impact_segment_rows=impact_segment_rows,
     )
 
     print(f"Snapshot: {snapshot_id}")
@@ -746,6 +1241,7 @@ def main() -> int:
             sort_keys=True,
         ),
     )
+    print(f"Temporal folds evaluated: {len(folds)}")
     print(f"Report: {report_path}")
     print(f"Artifacts root: {artifact_root}")
     return 0

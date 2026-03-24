@@ -70,6 +70,8 @@ Follow:
 
 - ML pipeline run and snapshot workflow: `docs/ml-training-snapshot-workflow.md`
 - Model registry policy: `docs/model-registry-and-versioning-policy.md`
+- Stage transition tooling: `infra/trino/queries/ml/run_ml_model_stage_transition.sh`
+- Rollback tooling: `infra/trino/queries/ml/run_ml_model_rollback.sh`
 
 ## Development commands
 

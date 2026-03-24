@@ -137,3 +137,29 @@ def ensure_ml_tables(spark: SparkSession) -> None:
         PARTITIONED BY (snapshot_id)
         """
     )
+
+    spark.sql(
+        """
+        CREATE TABLE IF NOT EXISTS tf2.default.ml_model_validation_metrics_daily (
+          model_name STRING,
+          model_version STRING,
+          task_type STRING,
+          snapshot_id STRING,
+          progress_date DATE,
+          rows_total BIGINT,
+          observed_positive_rate DOUBLE,
+          predicted_positive_rate DOUBLE,
+          precision DOUBLE,
+          recall DOUBLE,
+          f1 DOUBLE,
+          roc_auc DOUBLE,
+          pr_auc DOUBLE,
+          brier DOUBLE,
+          rmse DOUBLE,
+          mae DOUBLE,
+          created_at TIMESTAMP
+        )
+        USING iceberg
+        PARTITIONED BY (model_name, months(progress_date))
+        """
+    )

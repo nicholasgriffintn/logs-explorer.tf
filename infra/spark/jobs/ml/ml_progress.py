@@ -248,3 +248,43 @@ def refresh_ml_progress_serving_tables(spark: SparkSession) -> None:
         CROSS JOIN active_models am
         """
     )
+
+    spark.sql(
+        """
+        CREATE OR REPLACE TABLE tf2.default.serving_ml_prediction_quality_daily
+        USING iceberg
+        PARTITIONED BY (model_name, months(progress_date))
+        AS
+        SELECT
+          q.model_name,
+          q.model_version,
+          q.task_type,
+          q.snapshot_id,
+          q.progress_date,
+          q.rows_total,
+          q.observed_positive_rate,
+          q.predicted_positive_rate,
+          q.precision,
+          q.recall,
+          q.f1,
+          q.roc_auc,
+          q.pr_auc,
+          q.brier,
+          q.rmse,
+          q.mae,
+          r.stage,
+          COALESCE(r.is_active, FALSE) AS is_active,
+          sm.snapshot_cutoff_date,
+          DATEDIFF(
+            CURRENT_DATE(),
+            CAST(COALESCE(sm.snapshot_cutoff_time, q.created_at) AS DATE)
+          ) AS data_age_days,
+          CURRENT_TIMESTAMP() AS updated_at
+        FROM tf2.default.ml_model_validation_metrics_daily q
+        LEFT JOIN tf2.default.ml_model_registry r
+          ON r.model_name = q.model_name
+         AND r.model_version = q.model_version
+        LEFT JOIN snapshot_meta sm
+          ON sm.snapshot_id = q.snapshot_id
+        """
+    )

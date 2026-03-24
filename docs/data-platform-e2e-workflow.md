@@ -67,8 +67,10 @@ Outputs:
 - `ml_training_player_match`
 - `ml_model_registry`
 - `ml_model_stage_history`
+- `ml_model_validation_metrics_daily`
 - `serving_ml_model_registry`
 - `serving_ml_pipeline_progress_daily`
+- `serving_ml_prediction_quality_daily`
 
 ## 5) Run quality checks and training
 

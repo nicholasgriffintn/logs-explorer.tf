@@ -24,15 +24,14 @@ Label definition:
 
 Recommended features:
 
-- **Match context**: `map`, `team`, `duration_seconds`, `team_score`, `opponent_score`, `score_delta`
-- **Player production**: `kills`, `assists`, `deaths`, `damage_dealt`, `healing_done`, `ubers_used`
-- **Relative contribution**: `kill_share_of_team`, `damage_share_of_team`, `healing_share_of_team`, `impact_index`
-- **Pace/efficiency**: `damage_per_minute`, `kda_ratio`
-- **Recent form**: `rolling_5_avg_kills`, `rolling_10_avg_damage`, `rolling_10_avg_impact`, `rolling_10_kda_ratio`, `rolling_10_win_rate`, `form_delta_kills`, `form_delta_damage`, `form_delta_impact`, `momentum_label`
+- **Context**: `map`, `team`, `momentum_label`
+- **Recent form**: `rolling_5_avg_kills`, `rolling_10_avg_damage`, `rolling_10_avg_impact`, `rolling_10_kda_ratio`, `rolling_10_win_rate`, `rolling_10_negative_chat_ratio`, `form_delta_kills`, `form_delta_damage`, `form_delta_impact`
+- **Career anchors**: `career_avg_kills`, `career_avg_damage`, `career_avg_impact`, `games_played_to_date`
 
 Exclusions:
 
 - do not include post-outcome leakage features beyond match-observed inputs.
+- block direct outcome-proxy fields (`team_score`, `opponent_score`, `score_delta`) from predictive win training.
 
 ## Model 2: player impact percentile
 
@@ -46,9 +45,8 @@ Label definition:
 
 Recommended features:
 
-- **Production and contribution**: `kills`, `assists`, `deaths`, `damage_dealt`, `healing_done`, `ubers_used`, `kill_share_of_team`, `damage_share_of_team`, `healing_share_of_team`
-- **Form trajectory**: `rolling_10_avg_impact`, `career_avg_impact`, `career_avg_damage`, `career_avg_kills`, `form_delta_impact`, `games_played_to_date`
-- **Style context**: `classes_played_count`, `map`, `team`
+- **Context**: `map`, `team`, `momentum_label`
+- **Form trajectory**: `rolling_5_avg_kills`, `rolling_10_avg_damage`, `rolling_10_avg_impact`, `rolling_10_kda_ratio`, `rolling_10_win_rate`, `career_avg_impact`, `career_avg_damage`, `career_avg_kills`, `form_delta_kills`, `form_delta_damage`, `form_delta_impact`, `games_played_to_date`
 
 ## Model 3: toxicity/tilt classifier
 

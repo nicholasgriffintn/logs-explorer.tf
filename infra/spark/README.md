@@ -47,8 +47,10 @@ Builds/refreshes:
 - `tf2.default.ml_training_player_match`
 - `tf2.default.ml_model_registry`
 - `tf2.default.ml_model_stage_history`
+- `tf2.default.ml_model_validation_metrics_daily`
 - `tf2.default.serving_ml_model_registry`
 - `tf2.default.serving_ml_pipeline_progress_daily`
+- `tf2.default.serving_ml_prediction_quality_daily`
 - `tf2.default.ops_pipeline_runs` entries for ML steps
 
 Run:
