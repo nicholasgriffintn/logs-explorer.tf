@@ -12,6 +12,7 @@ class MemoryKv implements KeyValueStore {
     this.values.set(key, value);
   }
 }
+const CURSOR_STATE_KEY = "tf2-ingest-state-v1";
 
 class MemoryStream<TRecord> {
   readonly batches: TRecord[][] = [];
@@ -320,5 +321,83 @@ test("runIngest retries transient pipeline overload errors", async () => {
 
   expect(result.emittedCoreLogs).toBe(2);
   expect(result.failedLogs).toBe(0);
+  expect(logsStream.batches.flat()).toHaveLength(2);
+});
+
+test("runIngest caps due retries per run", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+  const calls: string[] = [];
+
+  await kv.put(
+    CURSOR_STATE_KEY,
+    JSON.stringify({
+      lastIngestedLogId: 4031052,
+      failedLogs: {
+        "3905184": {
+          summary: {
+            id: 3905184,
+            title: "failed-3905184",
+            map: "cp_process_f12",
+            date: 1774213000,
+            views: 10,
+            players: 12,
+          },
+          attempts: 3,
+          nextAttemptAtEpochMs: 0,
+          lastError: "temporary failure",
+        },
+        "3905192": {
+          summary: {
+            id: 3905192,
+            title: "failed-3905192",
+            map: "cp_process_f12",
+            date: 1774213000,
+            views: 10,
+            players: 12,
+          },
+          attempts: 3,
+          nextAttemptAtEpochMs: 0,
+          lastError: "temporary failure",
+        },
+        "3905217": {
+          summary: {
+            id: 3905217,
+            title: "failed-3905217",
+            map: "cp_process_f12",
+            date: 1774213000,
+            views: 10,
+            players: 12,
+          },
+          attempts: 3,
+          nextAttemptAtEpochMs: 0,
+          lastError: "temporary failure",
+        },
+      },
+      updatedAt: "2026-03-22T12:00:00.000Z",
+    }),
+  );
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    LOGS_TF_MAX_RETRY_LOGS_PER_RUN: "2",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const result = await runIngest(env, {
+    fetchFn: makeFetchStubWithDetail(calls, [], (logId) => detailPayload(logId)),
+    now: new Date("2026-03-22T12:05:00.000Z"),
+  });
+
+  expect(result.retriedLogs).toBe(2);
+  expect(result.failedLogs).toBe(1);
   expect(logsStream.batches.flat()).toHaveLength(2);
 });

@@ -21,6 +21,7 @@ export function buildConfig(env: IngestEnv): IngestConfig {
     requestDelayMs: parsePositiveInt(env.LOGS_TF_REQUEST_DELAY_MS, 250),
     fetchRetries: parsePositiveInt(env.LOGS_TF_FETCH_RETRIES, 4),
     maxFailedLogs: parsePositiveInt(env.LOGS_TF_MAX_FAILED_LOGS, 500),
+    maxRetryLogsPerRun: parsePositiveInt(env.LOGS_TF_MAX_RETRY_LOGS_PER_RUN, 10),
     pipelineBatchSize: parsePositiveInt(env.PIPELINES_BATCH_SIZE, 50),
   };
 }

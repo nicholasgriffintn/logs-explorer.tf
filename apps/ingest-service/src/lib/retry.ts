@@ -11,15 +11,22 @@ export function computeRetryDelayMs(attempts: number): number {
 }
 
 export function dueRetrySummaries(state: IngestState, nowEpochMs: number): LogsTfLogSummary[] {
-  const due: LogsTfLogSummary[] = [];
+  const due: Array<(typeof state.failedLogs)[string]> = [];
 
   for (const failed of Object.values(state.failedLogs)) {
     if (failed.nextAttemptAtEpochMs <= nowEpochMs) {
-      due.push(failed.summary);
+      due.push(failed);
     }
   }
 
-  return due;
+  due.sort((left, right) => {
+    if (left.nextAttemptAtEpochMs !== right.nextAttemptAtEpochMs) {
+      return left.nextAttemptAtEpochMs - right.nextAttemptAtEpochMs;
+    }
+    return left.summary.id - right.summary.id;
+  });
+
+  return due.map((failed) => failed.summary);
 }
 
 export function mergeCandidates(

@@ -45,6 +45,7 @@ export interface IngestEnv {
   LOGS_TF_REQUEST_DELAY_MS?: string;
   LOGS_TF_FETCH_RETRIES?: string;
   LOGS_TF_MAX_FAILED_LOGS?: string;
+  LOGS_TF_MAX_RETRY_LOGS_PER_RUN?: string;
   PIPELINES_BATCH_SIZE?: string;
 }
 
@@ -81,6 +82,7 @@ export interface IngestConfig {
   requestDelayMs: number;
   fetchRetries: number;
   maxFailedLogs: number;
+  maxRetryLogsPerRun: number;
   pipelineBatchSize: number;
 }
 

@@ -91,14 +91,28 @@ export async function runIngest(
     nextBackfillOffset = fullHistoryBatch.nextOffset;
   } else {
     newSummaries = await collectNewSummaries(fetchFn, config, state.lastIngestedLogId);
-    retrySummaries = dueRetrySummaries(state, nowEpochMs);
+    const dueRetries = dueRetrySummaries(state, nowEpochMs);
+    retrySummaries = dueRetries.slice(0, config.maxRetryLogsPerRun);
+    if (dueRetries.length > retrySummaries.length) {
+      console.log(
+        `Retry backlog throttled: processing ${retrySummaries.length} of ${dueRetries.length} due retries this run`,
+      );
+    }
     candidates = mergeCandidates(newSummaries, retrySummaries);
   }
 
+  const candidatePreviewLimit = 50;
+  const candidateIds = candidates.slice(0, candidatePreviewLimit).map((s) => s.id);
+
   console.log(
     `Mode=${mode}. Fetched ${newSummaries.length} new summaries and ${retrySummaries.length} retry summaries, total ${candidates.length} candidates to process`,
-    candidates.map((s) => s.id),
+    candidateIds,
   );
+  if (candidates.length > candidatePreviewLimit) {
+    console.log(
+      `Candidate list truncated in logs: ${candidates.length - candidatePreviewLimit} more`,
+    );
+  }
 
   let emittedCoreLogs = 0;
   let emittedChatMessages = 0;
