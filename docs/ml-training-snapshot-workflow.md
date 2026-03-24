@@ -48,7 +48,7 @@ The pipeline step `ml_training_snapshot_refresh` materialises snapshot rows.
 Run data readiness checks before or alongside snapshots:
 
 ```bash
-infra/trino/queries/run_ml_readiness_check.sh
+infra/trino/queries/ml/run_ml_readiness_check.sh
 ```
 
 ## Lineage minimum for model runs
@@ -68,7 +68,7 @@ Do not train directly from live `features_*` tables in scheduled jobs.
 Train baseline models from the latest snapshot and upsert candidate rows in `ml_model_registry`:
 
 ```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
 ```
 
 The training runner uses a dedicated Docker image and publishes:

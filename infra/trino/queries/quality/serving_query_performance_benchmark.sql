@@ -1,6 +1,6 @@
 -- Benchmark pack for serving query latency checks.
 -- Run with:
---   docker exec -i tf2-trino trino < infra/trino/queries/24_serving_query_performance_benchmark.sql
+--   docker exec -i tf2-trino trino < infra/trino/queries/quality/serving_query_performance_benchmark.sql
 --
 -- Use EXPLAIN ANALYZE output to record wall time and scanned rows.
 -- Repeat each query at least 5 times and record P95.

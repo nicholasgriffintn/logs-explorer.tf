@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession
 
-from spark_utils import FEATURES_RECENT_FORM_TABLE, table_exists
+from ops.spark_utils import FEATURES_RECENT_FORM_TABLE, table_exists
 
 
 def create_recent_form_source_view(spark: SparkSession, mode: str, refresh_days: int) -> None:

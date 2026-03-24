@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession
 
-from spark_utils import table_exists
+from ops.spark_utils import table_exists
 
 
 SERVING_PLAYER_PROFILES_TABLE = "tf2.default.serving_player_profiles"

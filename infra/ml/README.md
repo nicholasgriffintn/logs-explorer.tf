@@ -13,7 +13,7 @@ This directory contains the containerised ML training runtime for baseline model
 Use the query runner entrypoint:
 
 ```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
 ```
 
 This will:

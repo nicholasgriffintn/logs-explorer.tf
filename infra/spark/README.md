@@ -2,6 +2,20 @@
 
 Spark owns all processing. Trino is query-serving only.
 
+## Job layout
+
+Spark jobs are grouped by domain under `infra/spark/jobs`:
+
+- `features/`: feature table sources and refresh logic (`features_*`)
+- `serving/`: serving table materialisation (`serving_*`)
+- `ml/`: ML snapshot and ML serving progress refresh
+- `ops/`: pipeline orchestration, run metadata, and shared Spark utilities
+
+Entrypoints remain:
+
+- `infra/spark/jobs/build_processing.py`
+- `infra/spark/jobs/build_features.py`
+
 ## Pipelines
 
 ### 1) Feature and serving pipeline

@@ -4,7 +4,7 @@ set -euo pipefail
 
 TRINO_CONTAINER="${TRINO_CONTAINER:-tf2-trino}"
 QUERIES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-READINESS_SQL="$QUERIES_DIR/33_ml_data_readiness_check.sql"
+READINESS_SQL="$QUERIES_DIR/ml_data_readiness_check.sql"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required" >&2

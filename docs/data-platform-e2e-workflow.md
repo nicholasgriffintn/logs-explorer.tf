@@ -75,19 +75,19 @@ Outputs:
 Serving quality checks:
 
 ```bash
-docker exec -i tf2-trino trino < infra/trino/queries/19_data_quality_checks.sql
+docker exec -i tf2-trino trino < infra/trino/queries/quality/data_quality_checks.sql
 ```
 
 Readiness checks:
 
 ```bash
-infra/trino/queries/run_ml_readiness_check.sh
+infra/trino/queries/ml/run_ml_readiness_check.sh
 ```
 
 Baseline training:
 
 ```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
 ```
 
 ## 6) Query and dashboards (Trino/Superset)

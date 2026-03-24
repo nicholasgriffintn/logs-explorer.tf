@@ -5,16 +5,16 @@ That pattern scales poorly as player history grows and makes the P95 under 3 sec
 
 ## What we changed
 
-- Rewrote `21_dashboard_player_profile_and_momentum.sql` to compute target-player percentiles using a single population scan instead of full-table window ranking.
+- Rewrote `dashboard_player_profile_and_momentum.sql` to compute target-player percentiles using a single population scan instead of full-table window ranking.
 - Kept dashboard dependencies on `serving_*` tables only, so contract boundaries remain unchanged.
-- Added `24_serving_query_performance_benchmark.sql` as a repeatable benchmark pack using `EXPLAIN ANALYZE`.
+- Added `serving_query_performance_benchmark.sql` as a repeatable benchmark pack using `EXPLAIN ANALYZE`.
 
 ## How to benchmark
 
 Run:
 
 ```bash
-docker exec -i tf2-trino trino < infra/trino/queries/24_serving_query_performance_benchmark.sql
+docker exec -i tf2-trino trino < infra/trino/queries/quality/serving_query_performance_benchmark.sql
 ```
 
 For each benchmark query:

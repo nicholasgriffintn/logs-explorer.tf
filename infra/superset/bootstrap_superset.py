@@ -21,7 +21,7 @@ TRINO_URI = os.environ.get(
   "SUPERSET_TRINO_SQLALCHEMY_URI",
   "trino://trino@tf2-trino:8080/tf2/default",
 )
-QUERY_DIR = os.environ.get("SUPERSET_QUERY_DIR", "/workspace/trino-queries")
+QUERY_DIR = os.environ.get("SUPERSET_QUERY_DIR", "/workspace/trino-queries/dashboard")
 
 DATABASE_NAME = "TF2 Trino"
 DATASETS = (
@@ -41,11 +41,11 @@ DASHBOARDS = (
 )
 
 SAVED_QUERY_FILES = (
-  ("Player Profile and Momentum", "21_dashboard_player_profile_and_momentum.sql"),
-  ("Map Competitiveness and Pace", "22_dashboard_map_competitiveness_and_pace.sql"),
-  ("Chat Behaviour and Tilt Risk", "23_dashboard_chat_behaviour_and_tilt_risk.sql"),
-  ("Player Match Deep Dive", "31_dashboard_player_match_deep_dive.sql"),
-  ("ML Progress and Registry", "32_dashboard_ml_progress_and_registry.sql"),
+  ("Player Profile and Momentum", "dashboard_player_profile_and_momentum.sql"),
+  ("Map Competitiveness and Pace", "dashboard_map_competitiveness_and_pace.sql"),
+  ("Chat Behaviour and Tilt Risk", "dashboard_chat_behaviour_and_tilt_risk.sql"),
+  ("Player Match Deep Dive", "dashboard_player_match_deep_dive.sql"),
+  ("ML Progress and Registry", "dashboard_ml_progress_and_registry.sql"),
 )
 
 DASHBOARD_CHART_SPECS = {

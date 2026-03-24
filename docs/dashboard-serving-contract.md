@@ -18,7 +18,7 @@ Non-contract tables (`core`, `features`) may evolve more quickly and should not 
 
 - Refresh cadence: feature-serving Spark pipeline (`infra/spark/run_feature_pipeline.sh incremental`) daily or more often.
 - ML progress cadence: separate ML Spark pipeline (`infra/spark/run_ml_pipeline.sh incremental`) on its own schedule.
-- Publish gate: `19_data_quality_checks.sql` must be all `PASS`.
+- Publish gate: `data_quality_checks.sql` must be all `PASS`.
 - SLA target: serving query P95 under 3 seconds for dashboard slices.
 
 ## `serving_player_profiles`
@@ -121,11 +121,11 @@ Contract rules:
 
 Starter query pack:
 
-- `infra/trino/queries/21_dashboard_player_profile_and_momentum.sql`
-- `infra/trino/queries/22_dashboard_map_competitiveness_and_pace.sql`
-- `infra/trino/queries/23_dashboard_chat_behaviour_and_tilt_risk.sql`
-- `infra/trino/queries/31_dashboard_player_match_deep_dive.sql`
-- `infra/trino/queries/32_dashboard_ml_progress_and_registry.sql`
+- `infra/trino/queries/dashboard/dashboard_player_profile_and_momentum.sql`
+- `infra/trino/queries/dashboard/dashboard_map_competitiveness_and_pace.sql`
+- `infra/trino/queries/dashboard/dashboard_chat_behaviour_and_tilt_risk.sql`
+- `infra/trino/queries/dashboard/dashboard_player_match_deep_dive.sql`
+- `infra/trino/queries/dashboard/dashboard_ml_progress_and_registry.sql`
 
 ## Change management
 

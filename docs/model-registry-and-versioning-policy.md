@@ -19,7 +19,7 @@ infra/spark/run_ml_pipeline.sh incremental
 Baseline training can populate candidate rows directly:
 
 ```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/run_ml_baseline_training.sh
+MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
 ```
 
 This command runs training in a dedicated container image so dependency updates are

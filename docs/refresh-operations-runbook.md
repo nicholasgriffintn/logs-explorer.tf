@@ -59,13 +59,13 @@ Optional environment overrides:
 Run serving quality checks after feature-serving pipeline execution:
 
 ```bash
-docker exec -i tf2-trino trino < infra/trino/queries/19_data_quality_checks.sql
+docker exec -i tf2-trino trino < infra/trino/queries/quality/data_quality_checks.sql
 ```
 
 Run ML readiness checks after ML pipeline execution:
 
 ```bash
-infra/trino/queries/run_ml_readiness_check.sh
+infra/trino/queries/ml/run_ml_readiness_check.sh
 ```
 
 ## Run metadata

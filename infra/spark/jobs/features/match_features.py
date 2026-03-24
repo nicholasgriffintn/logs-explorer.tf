@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession
 
-from spark_utils import FEATURES_MATCH_TABLE, table_exists
+from ops.spark_utils import FEATURES_MATCH_TABLE, table_exists
 
 
 def create_match_source_view(spark: SparkSession) -> None:

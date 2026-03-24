@@ -66,11 +66,11 @@ And creates:
 - dashboard shell: chat behaviour and tilt risk
 - dashboard shell: player match deep dive
 - dashboard shell: ML progress and registry
-- saved query source: `infra/trino/queries/21_dashboard_player_profile_and_momentum.sql`
-- saved query source: `infra/trino/queries/22_dashboard_map_competitiveness_and_pace.sql`
-- saved query source: `infra/trino/queries/23_dashboard_chat_behaviour_and_tilt_risk.sql`
-- saved query source: `infra/trino/queries/31_dashboard_player_match_deep_dive.sql`
-- saved query source: `infra/trino/queries/32_dashboard_ml_progress_and_registry.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_player_profile_and_momentum.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_map_competitiveness_and_pace.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_chat_behaviour_and_tilt_risk.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_player_match_deep_dive.sql`
+- saved query source: `infra/trino/queries/dashboard/dashboard_ml_progress_and_registry.sql`
 
 To run bootstrap again manually:
 
