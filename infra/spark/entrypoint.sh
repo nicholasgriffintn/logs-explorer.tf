@@ -11,6 +11,9 @@ SPARK_DRIVER_MEMORY="${SPARK_DRIVER_MEMORY:-6g}"
 SPARK_EXECUTOR_MEMORY="${SPARK_EXECUTOR_MEMORY:-6g}"
 SPARK_SQL_SHUFFLE_PARTITIONS="${SPARK_SQL_SHUFFLE_PARTITIONS:-512}"
 SPARK_DEFAULT_PARALLELISM="${SPARK_DEFAULT_PARALLELISM:-256}"
+SPARK_ICEBERG_VECTORIZATION_ENABLED="${SPARK_ICEBERG_VECTORIZATION_ENABLED:-false}"
+SPARK_PARQUET_VECTORIZED_READER_ENABLED="${SPARK_PARQUET_VECTORIZED_READER_ENABLED:-false}"
+SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED="${SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED:-false}"
 
 required_vars=(
   CATALOG_URI
@@ -70,9 +73,9 @@ exec "$SPARK_SUBMIT_BIN" \
   --conf "spark.executor.memory=${SPARK_EXECUTOR_MEMORY}" \
   --packages "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,software.amazon.awssdk:bundle:2.20.160,software.amazon.awssdk:url-connection-client:2.20.160" \
   --conf "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions" \
-  --conf "spark.sql.iceberg.vectorization.enabled=false" \
-  --conf "spark.sql.parquet.enableVectorizedReader=false" \
-  --conf "spark.sql.parquet.enableNestedColumnVectorizedReader=false" \
+  --conf "spark.sql.iceberg.vectorization.enabled=${SPARK_ICEBERG_VECTORIZATION_ENABLED}" \
+  --conf "spark.sql.parquet.enableVectorizedReader=${SPARK_PARQUET_VECTORIZED_READER_ENABLED}" \
+  --conf "spark.sql.parquet.enableNestedColumnVectorizedReader=${SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED}" \
   --conf "spark.sql.shuffle.partitions=${SPARK_SQL_SHUFFLE_PARTITIONS}" \
   --conf "spark.default.parallelism=${SPARK_DEFAULT_PARALLELISM}" \
   --conf "spark.sql.adaptive.enabled=true" \

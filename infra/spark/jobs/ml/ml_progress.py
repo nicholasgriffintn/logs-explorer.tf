@@ -25,13 +25,7 @@ def refresh_ml_progress_serving_tables(spark: SparkSession) -> None:
 
     spark.sql(
         """
-        DROP TABLE IF EXISTS tf2.default.serving_ml_model_registry
-        """
-    )
-
-    spark.sql(
-        """
-        CREATE TABLE tf2.default.serving_ml_model_registry
+        CREATE OR REPLACE TABLE tf2.default.serving_ml_model_registry
         USING iceberg
         PARTITIONED BY (model_name)
         AS
@@ -216,13 +210,7 @@ def refresh_ml_progress_serving_tables(spark: SparkSession) -> None:
 
     spark.sql(
         """
-        DROP TABLE IF EXISTS tf2.default.serving_ml_pipeline_progress_daily
-        """
-    )
-
-    spark.sql(
-        """
-        CREATE TABLE tf2.default.serving_ml_pipeline_progress_daily
+        CREATE OR REPLACE TABLE tf2.default.serving_ml_pipeline_progress_daily
         USING iceberg
         PARTITIONED BY (months(progress_date))
         AS

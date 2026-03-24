@@ -53,6 +53,7 @@ Optional environment overrides:
 
 - Feature-serving pipeline: frequent (hourly/daily).
 - ML pipeline: separate cadence (daily/weekly or triggered by model lifecycle windows).
+- Iceberg maintenance: regular cadence (for example weekly) to compact files and trim old snapshots.
 
 ## Quality gate
 
@@ -66,6 +67,12 @@ Run ML readiness checks after ML pipeline execution:
 
 ```bash
 infra/trino/queries/ml/run_ml_readiness_check.sh
+```
+
+Run Iceberg maintenance on regular cadence:
+
+```bash
+infra/trino/queries/ops/run_iceberg_maintenance.sh
 ```
 
 ## Run metadata

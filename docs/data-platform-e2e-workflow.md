@@ -103,3 +103,4 @@ Trino serves query workloads on top of Spark-produced tables.
 - Feature-serving pipeline: hourly/daily.
 - ML pipeline: daily/weekly, aligned to retraining windows.
 - Baseline/production training: triggered by model lifecycle policy.
+- Iceberg maintenance (`infra/trino/queries/ops/run_iceberg_maintenance.sh`): weekly (or more often if ingest volume increases).

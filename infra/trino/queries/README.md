@@ -46,6 +46,10 @@ Quality (`infra/trino/queries/quality`):
 - `data_quality_checks.sql`: quality gate checks with PASS/FAIL thresholds
 - `serving_query_performance_benchmark.sql`: benchmark pack (`EXPLAIN ANALYZE`) for serving query latency checks
 
+Ops (`infra/trino/queries/ops`):
+
+- `run_iceberg_maintenance.sh`: compaction + snapshot expiry for existing Iceberg tables
+
 ML (`infra/trino/queries/ml`):
 
 - `ml_data_readiness_check.sql`: ML data quality/readiness checks
@@ -70,6 +74,12 @@ Run serving quality checks after refresh:
 
 ```bash
 docker exec -i tf2-trino trino < infra/trino/queries/quality/data_quality_checks.sql
+```
+
+Run Iceberg table maintenance on a regular cadence (for example weekly):
+
+```bash
+infra/trino/queries/ops/run_iceberg_maintenance.sh
 ```
 
 Operational details and failure recovery are documented in:

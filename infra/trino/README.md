@@ -49,6 +49,7 @@ Use the SQL files under `infra/trino/queries` for deeper analytics:
 - pair synergy and head-to-head comparisons
 - map specialisation and class flexibility
 - sentiment feature export for downstream modelling
+- Iceberg maintenance operations for compaction and snapshot expiry
 
 Before dashboard-serving queries, refresh Spark outputs:
 
@@ -63,6 +64,12 @@ infra/spark/run_ml_pipeline.sh incremental
 ```
 
 Entry point: `infra/trino/queries/README.md`.
+
+For maintenance of Iceberg table metadata and file layout:
+
+```bash
+infra/trino/queries/ops/run_iceberg_maintenance.sh
+```
 
 For the full ingest -> Spark -> Trino -> ML flow, use:
 

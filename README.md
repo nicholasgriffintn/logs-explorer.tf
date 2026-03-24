@@ -63,6 +63,7 @@ Follow:
 - Superset dashboard workspace setup: `infra/superset/README.md`
 - Refresh operations and recovery guidance: `docs/refresh-operations-runbook.md`
 - Serving performance benchmark/tuning notes: `docs/serving-query-performance-tuning.md`
+- Iceberg maintenance runner: `infra/trino/queries/ops/run_iceberg_maintenance.sh`
 
 ## Machine learning operations
 

@@ -103,6 +103,24 @@ Optional values:
 - `SPARK_EXECUTOR_MEMORY` (default `6g`)
 - `SPARK_SQL_SHUFFLE_PARTITIONS` (default `512`)
 - `SPARK_DEFAULT_PARALLELISM` (default `256`)
+- `SPARK_ICEBERG_VECTORIZATION_ENABLED` (default `false`)
+- `SPARK_PARQUET_VECTORIZED_READER_ENABLED` (default `false`)
+- `SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED` (default `false`)
+
+## Vectorization trial
+
+Vectorized readers are toggleable for compatibility testing.
+
+Run one pipeline with vectorization enabled:
+
+```bash
+SPARK_ICEBERG_VECTORIZATION_ENABLED=true \
+SPARK_PARQUET_VECTORIZED_READER_ENABLED=true \
+SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED=true \
+infra/spark/run_feature_pipeline.sh incremental
+```
+
+If this reintroduces runtime issues, leave the defaults disabled and capture the failing stack trace before re-enabling.
 
 ## Recommended cadence
 

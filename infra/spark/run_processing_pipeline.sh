@@ -30,6 +30,9 @@ Environment variables:
   SPARK_EXECUTOR_MEMORY Executor heap (default: 6g)
   SPARK_SQL_SHUFFLE_PARTITIONS Shuffle partitions (default: 512)
   SPARK_DEFAULT_PARALLELISM    Default parallelism (default: 256)
+  SPARK_ICEBERG_VECTORIZATION_ENABLED Iceberg vectorization toggle (default: false)
+  SPARK_PARQUET_VECTORIZED_READER_ENABLED Parquet vectorized reader toggle (default: false)
+  SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED Nested Parquet vectorized reader toggle (default: false)
   SPARK_IMAGE     Spark processing image tag (default: logs-explorer-spark-processing:latest)
   SPARK_NETWORK   Docker network for job execution (default: logs-explorer)
   SPARK_ENV_FILE  Optional env file containing Spark catalog/storage settings
@@ -101,6 +104,9 @@ echo "Spark master: ${SPARK_MASTER:-local[4]}"
 echo "Spark driver memory: ${SPARK_DRIVER_MEMORY:-6g}"
 echo "Spark executor memory: ${SPARK_EXECUTOR_MEMORY:-6g}"
 echo "Spark shuffle partitions: ${SPARK_SQL_SHUFFLE_PARTITIONS:-512}"
+echo "Iceberg vectorization: ${SPARK_ICEBERG_VECTORIZATION_ENABLED:-false}"
+echo "Parquet vectorized reader: ${SPARK_PARQUET_VECTORIZED_READER_ENABLED:-false}"
+echo "Parquet nested vectorized reader: ${SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED:-false}"
 echo
 
 docker build -t "$SPARK_IMAGE" -f "$DOCKERFILE" "$ROOT_DIR"
@@ -117,6 +123,9 @@ docker run --rm \
   -e SPARK_EXECUTOR_MEMORY="${SPARK_EXECUTOR_MEMORY:-6g}" \
   -e SPARK_SQL_SHUFFLE_PARTITIONS="${SPARK_SQL_SHUFFLE_PARTITIONS:-512}" \
   -e SPARK_DEFAULT_PARALLELISM="${SPARK_DEFAULT_PARALLELISM:-256}" \
+  -e SPARK_ICEBERG_VECTORIZATION_ENABLED="${SPARK_ICEBERG_VECTORIZATION_ENABLED:-false}" \
+  -e SPARK_PARQUET_VECTORIZED_READER_ENABLED="${SPARK_PARQUET_VECTORIZED_READER_ENABLED:-false}" \
+  -e SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED="${SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED:-false}" \
   -e JOB_SCRIPT="$JOB_SCRIPT" \
   -e CATALOG_URI="$CATALOG_URI" \
   -e WAREHOUSE="$WAREHOUSE" \
