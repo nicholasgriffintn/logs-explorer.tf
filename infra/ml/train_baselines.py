@@ -1506,10 +1506,10 @@ def write_report(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Train baseline ML models and register candidates.")
     parser.add_argument("--trino-host", default=os.environ.get("TRINO_HOST", "tf2-trino"))
-    parser.add_argument("--trino-port", type=int, default=int(os.environ.get("TRINO_PORT", "8080")))
+    parser.add_argument("--trino-port", type=int, default=int(os.environ.get("TRINO_PORT", "8081")))
     parser.add_argument("--trino-user", default=os.environ.get("TRINO_USER", "ml_trainer"))
     parser.add_argument("--trino-catalog", default=os.environ.get("TRINO_CATALOG", "tf2"))
     parser.add_argument("--trino-schema", default=os.environ.get("TRINO_SCHEMA", "default"))
@@ -1573,7 +1573,7 @@ def main() -> int:
         type=float,
         default=float(os.environ.get("GATE_TILT_MAX_FOLD_F1_STD", "0.03")),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     trino_cfg = TrinoConfig(
         host=args.trino_host,

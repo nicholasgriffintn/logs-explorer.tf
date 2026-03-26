@@ -20,7 +20,7 @@ This will:
 
 - build `infra/ml/Dockerfile` into `logs-explorer-ml-trainer:latest` (override with `ML_TRAINER_IMAGE`)
 - run the trainer on the `logs-explorer` Docker network (override with `ML_TRAINER_NETWORK`)
-- connect to Trino (`tf2-trino:8080` by default)
+- connect to Trino (`tf2-trino:8081` by default)
 - write artefacts under `artifacts/ml/...`
 - write `docs/ml-offline-evaluation-report.md`
 - upsert candidate rows into `tf2.default.ml_model_registry`

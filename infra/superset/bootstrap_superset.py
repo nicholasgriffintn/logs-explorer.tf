@@ -19,7 +19,7 @@ ADMIN_USERNAME = os.environ.get("SUPERSET_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("SUPERSET_ADMIN_PASSWORD", "admin")
 TRINO_URI = os.environ.get(
   "SUPERSET_TRINO_SQLALCHEMY_URI",
-  "trino://trino@tf2-trino:8080/tf2/default",
+  "trino://trino@tf2-trino:8081/tf2/default",
 )
 QUERY_DIR = os.environ.get("SUPERSET_QUERY_DIR", "/workspace/trino-queries/dashboard")
 
@@ -920,7 +920,7 @@ def log(message: str) -> None:
 def can_reach_sqlalchemy_uri(sqlalchemy_uri: str, timeout: float = 3.0) -> tuple[bool, str]:
   parsed = urllib.parse.urlparse(sqlalchemy_uri)
   host = parsed.hostname
-  port = parsed.port or 8080
+  port = parsed.port or 8081
   if not host:
     return False, "missing host in sqlalchemy URI"
 

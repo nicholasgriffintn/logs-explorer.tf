@@ -1,0 +1,253 @@
+x-airflow-env: &airflow-env
+  AIRFLOW_HOME: /opt/airflow
+  AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+  AIRFLOW__CORE__DAGS_FOLDER: /workspace/infra/airflow/dags
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: "120"
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+  AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+  AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+  AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+  AIRFLOW__SCHEDULER__CATCHUP_BY_DEFAULT: "false"
+  AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+  AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth
+  AIRFLOW__API_AUTH__JWT_SECRET: "${AIRFLOW__API_AUTH__JWT_SECRET:-local-dev-airflow-jwt-signing-secret}"
+  AIRFLOW__WEBSERVER__SECRET_KEY: "${AIRFLOW__WEBSERVER__SECRET_KEY:-local-dev-airflow-webserver-secret-key}"
+  AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW__CORE__FERNET_KEY:-LqKNblU6lMsh9xLThWmiFlMV_tfWc_4o87xf222jGek=}"
+  AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+  AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-api-server:8080/execution/"
+  TF2_REPO_ROOT: /workspace
+  TF2_TRINO_CONTAINER: "${TF2_TRINO_CONTAINER:-tf2-trino}"
+  TF2_TRINO_HOST: "${TF2_TRINO_HOST:-tf2-trino}"
+  TF2_TRINO_PORT: "${TF2_TRINO_PORT:-8081}"
+  TF2_TRINO_USER: "${TF2_TRINO_USER:-airflow}"
+  TF2_TRINO_CATALOG: "${TF2_TRINO_CATALOG:-tf2}"
+  TF2_TRINO_SCHEMA: "${TF2_TRINO_SCHEMA:-default}"
+  TF2_TRINO_CONN_ID: "${TF2_TRINO_CONN_ID:-trino_default}"
+  TF2_MAINTENANCE_RETENTION: "${TF2_MAINTENANCE_RETENTION:-14d}"
+  TF2_MAINTENANCE_OPTIMIZE_THRESHOLD: "${TF2_MAINTENANCE_OPTIMIZE_THRESHOLD:-256MB}"
+  TF2_AIRFLOW_FEATURE_CRON: "${TF2_AIRFLOW_FEATURE_CRON:-15 * * * *}"
+  TF2_AIRFLOW_ML_CRON: "${TF2_AIRFLOW_ML_CRON:-0 4 * * *}"
+  TF2_AIRFLOW_E2E_CRON: "${TF2_AIRFLOW_E2E_CRON:-30 2 * * *}"
+  TF2_AIRFLOW_MAINTENANCE_CRON: "${TF2_AIRFLOW_MAINTENANCE_CRON:-0 5 * * 0}"
+  TF2_AIRFLOW_RUN_BASELINE_TRAINING_DEFAULT: "${TF2_AIRFLOW_RUN_BASELINE_TRAINING_DEFAULT:-false}"
+  TF2_AIRFLOW_RUN_ICEBERG_MAINTENANCE_DEFAULT: "${TF2_AIRFLOW_RUN_ICEBERG_MAINTENANCE_DEFAULT:-false}"
+
+x-airflow-common: &airflow-common
+  build:
+    context: ../..
+    dockerfile: infra/airflow/Dockerfile
+    args:
+      AIRFLOW_BASE_IMAGE: ${AIRFLOW_BASE_IMAGE:-apache/airflow:3.1.8-python3.12}
+  user: "${AIRFLOW_UID:-50000}:0"
+  env_file:
+    - ./airflow.env
+    - ../spark/spark.env
+  environment:
+    <<: *airflow-env
+  volumes:
+    - ../../:/workspace
+    - airflow_logs:/opt/airflow/logs
+    - airflow_plugins:/opt/airflow/plugins
+    - airflow_config:/opt/airflow/config
+  networks:
+    - default
+    - logs-explorer
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: tf2-airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - airflow_postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-bookworm
+    container_name: tf2-airflow-redis
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: tf2-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -euo pipefail
+        airflow db migrate
+        airflow connections create-default-connections
+        for var_name in \
+          TF2_REPO_ROOT \
+          TF2_TRINO_CONN_ID \
+          TF2_TRINO_CATALOG \
+          TF2_TRINO_SCHEMA \
+          TF2_AIRFLOW_FEATURE_CRON \
+          TF2_AIRFLOW_ML_CRON \
+          TF2_AIRFLOW_E2E_CRON \
+          TF2_AIRFLOW_MAINTENANCE_CRON \
+          TF2_AIRFLOW_RUN_BASELINE_TRAINING_DEFAULT \
+          TF2_AIRFLOW_RUN_ICEBERG_MAINTENANCE_DEFAULT \
+          CATALOG_URI \
+          WAREHOUSE \
+          R2_CATALOG_TOKEN \
+          R2_ENDPOINT \
+          R2_ACCESS_KEY_ID \
+          R2_SECRET_ACCESS_KEY \
+          REFRESH_DAYS \
+          SPARK_MASTER \
+          SPARK_DRIVER_MEMORY \
+          SPARK_EXECUTOR_MEMORY \
+          SPARK_SQL_SHUFFLE_PARTITIONS \
+          SPARK_DEFAULT_PARALLELISM \
+          SPARK_ICEBERG_VECTORIZATION_ENABLED \
+          SPARK_PARQUET_VECTORIZED_READER_ENABLED \
+          SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED \
+          TF2_MAINTENANCE_RETENTION \
+          TF2_MAINTENANCE_OPTIMIZE_THRESHOLD \
+          TRAIN_RATIO \
+          TRINO_HTTP_SCHEME \
+          WIN_POLICY_MIN_PRECISION \
+          WIN_POLICY_MIN_RECALL \
+          TILT_POLICY_MIN_PRECISION \
+          TILT_POLICY_MIN_RECALL \
+          GATE_WIN_MIN_F1 \
+          GATE_WIN_MAX_BRIER \
+          GATE_WIN_MIN_FOLD_F1 \
+          GATE_IMPACT_MAX_RMSE \
+          GATE_IMPACT_MAX_MAE \
+          GATE_IMPACT_MAX_FOLD_RMSE \
+          GATE_TILT_MIN_F1 \
+          GATE_TILT_MAX_BRIER \
+          GATE_TILT_MIN_RECALL \
+          GATE_TILT_MAX_FOLD_F1_STD \
+        ; do
+          if [[ -n "$${!var_name:-}" ]]; then
+            airflow variables set "$$var_name" "$${!var_name}" >/dev/null
+          fi
+        done
+        airflow connections delete trino_default || true
+        airflow connections add "$${TF2_TRINO_CONN_ID:-trino_default}" \
+          --conn-type trino \
+          --conn-host "$${TF2_TRINO_HOST:-tf2-trino}" \
+          --conn-port "$${TF2_TRINO_PORT:-8080}" \
+          --conn-login "$${TF2_TRINO_USER:-airflow}" \
+          --conn-schema "$${TF2_TRINO_SCHEMA:-default}" \
+          --conn-extra "{\"catalog\": \"$${TF2_TRINO_CATALOG:-tf2}\", \"protocol\": \"http\"}" || true
+        airflow connections delete spark_default || true
+        airflow connections add spark_default \
+          --conn-type spark \
+          --conn-host "$${SPARK_MASTER:-local[4]}" \
+          --conn-extra "{\"deploy-mode\": \"client\", \"spark-binary\": \"spark-submit\"}"
+        airflow users create \
+          --username "$${AIRFLOW_USER:-admin}" \
+          --password "$${AIRFLOW_PASSWORD:-admin}" \
+          --firstname TF2 \
+          --lastname Admin \
+          --role Admin \
+          --email admin@logs-explorer.local || true
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  airflow-api-server:
+    <<: *airflow-common
+    container_name: tf2-airflow-api-server
+    command: api-server
+    ports:
+      - "${AIRFLOW_WEB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: tf2-airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname '$${HOSTNAME}'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: tf2-airflow-dag-processor
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --hostname '$${HOSTNAME}'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-worker:
+    <<: *airflow-common
+    container_name: tf2-airflow-worker
+    command: celery worker
+    environment:
+      <<: *airflow-env
+      DUMB_INIT_SETSID: "0"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          celery --app airflow.providers.celery.executors.celery_executor.app inspect ping
+          -d "celery@$${HOSTNAME}" || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: tf2-airflow-triggerer
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type TriggererJob --hostname '$${HOSTNAME}'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  airflow_postgres:
+  airflow_logs:
+  airflow_plugins:
+  airflow_config:
+
+networks:
+  logs-explorer:
+    external: true

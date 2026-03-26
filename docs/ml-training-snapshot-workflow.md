@@ -12,22 +12,16 @@ Snapshot IDs are deterministic per source cut-off (`max(match_time)`), so reruns
 
 ## Run the workflow
 
-Refresh feature tables first:
+Run feature-serving refresh through Airflow first:
 
 ```bash
-infra/spark/run_feature_pipeline.sh incremental
+infra/airflow/scripts/airflow.sh trigger tf2_feature_serving_daily
 ```
 
-Snapshots are built by the dedicated ML Spark pipeline:
+Snapshots are built by the ML Airflow DAG:
 
 ```bash
-infra/spark/run_ml_pipeline.sh incremental
-```
-
-or:
-
-```bash
-infra/spark/run_ml_pipeline.sh full
+infra/airflow/scripts/airflow.sh trigger tf2_ml_daily_or_weekly
 ```
 
 The pipeline step `ml_training_snapshot_refresh` materialises snapshot rows.
@@ -48,7 +42,7 @@ The pipeline step `ml_training_snapshot_refresh` materialises snapshot rows.
 Run data readiness checks before or alongside snapshots:
 
 ```bash
-infra/trino/queries/ml/run_ml_readiness_check.sh
+infra/airflow/scripts/airflow.sh trigger tf2_ml_daily_or_weekly
 ```
 
 ## Lineage minimum for model runs
@@ -68,7 +62,7 @@ Do not train directly from live `features_*` tables in scheduled jobs.
 Train baseline models from the latest snapshot and upsert candidate rows in `ml_model_registry`:
 
 ```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
+infra/airflow/scripts/airflow.sh trigger tf2_ml_daily_or_weekly '{"run_baseline_training": true, "model_version": "v1.0.0"}'
 ```
 
 The training runner uses a dedicated Docker image and publishes:

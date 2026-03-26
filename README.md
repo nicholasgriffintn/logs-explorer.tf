@@ -1,6 +1,6 @@
 # TF2 Logs Explorer
 
-Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` using Cloudflare Pipelines, R2 Data Catalog, and Apache Trino.
+Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` using Cloudflare Pipelines, R2 Data Catalog, Apache Spark, Apache Airflow, and Apache Trino.
 
 > NOTE: This was built with the help of AI, I did quite a bit of work but the AI was also super helpful. I'm sharing this as an example of how these sorts of systems can be built with Cloudflare services and also as a platform to have a bit of fun with myself.
 
@@ -9,6 +9,7 @@ Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` 
 - `apps/ingest-service`: scheduled Cloudflare Worker that polls `logs.tf`, fetches details, and emits records into Pipelines.
 - `packages/tf2-log-model`: shared runtime validation + normalisation for logs list and detail payloads.
 - `infra/cloudflare/pipelines`: stream schema and setup instructions for Cloudflare Pipelines.
+- `infra/airflow`: orchestration runtime, DAGs, and operational command wrappers.
 - `infra/trino`: local Trino stack and catalog config template for querying R2 Data Catalog.
 - `infra/spark`: Spark processing pipelines for `features_*`, `serving_*`, and ML table materialisation.
 
@@ -43,28 +44,35 @@ Then set:
 Update `apps/ingest-service/wrangler.jsonc` with your KV namespace ID and stream IDs.
 The checked-in file currently includes all required bindings; replace IDs with your own values before deployment.
 
-### 4. Run ingest service locally
+### 4. Configure Spark and Trino
+
+Follow:
+
+- `infra/spark/README.md`
+- `infra/trino/README.md`
+
+### 5. Configure and start Airflow orchestration
+
+Follow:
+
+- `infra/airflow/README.md`
+
+### 6. Run ingest service locally
 
 ```bash
 pnpm --filter @logs-explorer/ingest-service dev
 ```
 
-### 5. Configure Trino
-
-Follow:
-
-- `infra/trino/README.md`
-
 ## Analytics and dashboards
 
-- End-to-end data/ML run flow: `docs/data-platform-e2e-workflow.md`
+- End-to-end Airflow-first run flow: `docs/data-platform-e2e-workflow.md`
+- Airflow runtime and DAG operations: `infra/airflow/README.md`
 - Spark processing pipelines: `infra/spark/README.md`
-- Query index, starter queries, and run commands: `infra/trino/queries/README.md`
+- Query index and analytics SQL pack: `infra/trino/queries/README.md`
 - Superset dashboard workspace setup: `infra/superset/README.md`
 - Refresh operations and recovery guidance: `docs/refresh-operations-runbook.md`
 - Serving performance benchmark/tuning notes: `docs/serving-query-performance-tuning.md`
-- Iceberg maintenance runner: `infra/trino/queries/ops/run_iceberg_maintenance.sh`
-- Platform expansion plans (Airflow, Atlas, Ranger, Pinot/Druid): `docs/platform-expansion/README.md`
+- Platform expansion plans (Atlas, Ranger, Pinot/Druid): `docs/platform-expansion/README.md`
 
 ## Machine learning operations
 
@@ -76,6 +84,11 @@ Follow:
 ## Development commands
 
 - `pnpm dev`: run ingest service locally
+- `pnpm airflow:up`: start full Airflow stack
+- `pnpm airflow:status`: show Airflow service status
+- `pnpm airflow:dags`: list registered DAGs
+- `pnpm airflow:trigger:e2e`: trigger the full E2E DAG
+- `pnpm airflow:down`: stop Airflow stack
 - `pnpm test`: run tests across the monorepo
 - `pnpm build`: run build scripts across the monorepo
 - `pnpm check`: format, lint, test, build

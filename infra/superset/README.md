@@ -2,35 +2,11 @@
 
 This directory provides a local Superset instance for building dashboards from `serving_*` tables.
 
+## Build Data
+
+Follow the E2E workflow in `docs/data-platform-e2e-workflow.md` to build Spark outputs and query them through Trino.
+
 ## Start Superset
-
-Start Trino first and keep it running:
-
-```bash
-docker compose -f infra/trino/docker-compose.yml up -d
-```
-
-This is part of the main platform flow in `docs/data-platform-e2e-workflow.md`.
-
-Run Spark feature-serving pipeline before bootstrap:
-
-```bash
-infra/spark/run_feature_pipeline.sh incremental
-```
-
-If ML progress dashboards must be current, run ML refresh separately:
-
-```bash
-infra/spark/run_ml_pipeline.sh incremental
-```
-
-If prediction-quality dashboards must be current, run baseline training before bootstrap:
-
-```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
-```
-
-Then start Superset:
 
 ```bash
 docker compose -f infra/superset/docker-compose.yml up --build -d
@@ -54,7 +30,7 @@ Change credentials via environment variables in your shell before startup:
 Bootstrap creates a Superset database named `TF2 Trino` using:
 
 ```text
-trino://trino@tf2-trino:8080/tf2/default
+trino://trino@tf2-trino:8081/tf2/default
 ```
 
 Bootstrap also creates datasets:

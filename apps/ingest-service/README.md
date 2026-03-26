@@ -41,12 +41,10 @@ The ingest service is designed to avoid overloading `logs.tf` and to prevent sil
 - optional full-history mode with queue-chained pagination (`INGEST_BACKFILL_QUEUE`)
 - request spacing (`LOGS_TF_REQUEST_DELAY_MS`) and retry budget (`LOGS_TF_FETCH_RETRIES`)
 - retry queue for failed logs with exponential backoff and per-run retry cap (`LOGS_TF_MAX_RETRY_LOGS_PER_RUN`)
-- failed logs are suppressed from "new" candidate selection until retry backoff is due
-- retry progress tracks dataset delivery (`logs`, `chat`, `players`) so partial failures resume without re-emitting already delivered records
+- failed logs are suppressed from new candidate selection until retry backoff is due
+- retry progress tracks dataset delivery (`logs`, `chat`, `players`) so partial failures resume without re-emitting delivered records
 - per-log downstream emission with record-capped sends (`PIPELINES_BATCH_SIZE`)
 - strict payload validation before emission
-
-This gives predictable API pressure, resumable ingestion, and safer long-running operation.
 
 ## Data contracts to Pipelines
 
@@ -67,7 +65,6 @@ Schema: `infra/cloudflare/pipelines/tf2-log-stream.schema.json`
 From stream: `TF2_CHAT_STREAM`
 
 - one row per chat line with `message`, `messageLower`, `steamId`, `playerName`
-- enables moderation workflows (for example slur keyword filters) and chat behaviour analysis
 
 Schema: `infra/cloudflare/pipelines/tf2-chat-stream.schema.json`
 
@@ -76,30 +73,27 @@ Schema: `infra/cloudflare/pipelines/tf2-chat-stream.schema.json`
 From stream: `TF2_PLAYERS_STREAM`
 
 - one row per player per log with kills/assists/deaths/damage/healing/ubers/team/classes
-- supports per-class, per-player, and per-map performance analytics
 
 Schema: `infra/cloudflare/pipelines/tf2-player-stream.schema.json`
+
+## Orchestration boundary
+
+This service handles ingestion only.
+All downstream processing, quality gates, maintenance, and ML orchestration are managed in Airflow (`infra/airflow`).
 
 ## Endpoints
 
 - `GET /health`
 - `GET /ingest?dryRun=true`
 - `POST /ingest`
-- `POST /ingest?mode=full-history[&offset=0]` (run one full-history chunk immediately)
-- `POST /ingest/full-history/start[?offset=0]` (seed queue-driven full-history run)
+- `POST /ingest?mode=full-history[&offset=0]`
+- `POST /ingest/full-history/start[?offset=0]`
 
 ## Local dev
 
 ```bash
 cp .dev.vars.example .dev.vars
 pnpm --filter @logs-explorer/ingest-service dev
-```
-
-You can then test the endpoints with:
-
-```bash
-curl http://localhost:8787/health
-curl -X POST http://localhost:8787/ingest?dryRun=true
 ```
 
 ## Required bindings

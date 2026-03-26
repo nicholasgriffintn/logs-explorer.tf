@@ -67,7 +67,7 @@ services:
       SUPERSET_BASE_URL: http://tf2-superset:8088
       SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
       SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
-      SUPERSET_TRINO_SQLALCHEMY_URI: ${SUPERSET_TRINO_SQLALCHEMY_URI:-trino://trino@tf2-trino:8080/tf2/default}
+      SUPERSET_TRINO_SQLALCHEMY_URI: ${SUPERSET_TRINO_SQLALCHEMY_URI:-trino://trino@tf2-trino:8081/tf2/default}
       SUPERSET_QUERY_DIR: /workspace/trino-queries/dashboard
     volumes:
       - ./bootstrap_superset.py:/app/pythonpath/bootstrap_superset.py:ro

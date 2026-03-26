@@ -90,5 +90,5 @@ For each baseline model, publish:
 Run this before ML pipeline snapshot materialisation and training:
 
 ```bash
-infra/trino/queries/ml/run_ml_readiness_check.sh
+infra/airflow/scripts/airflow.sh trigger tf2_ml_daily_or_weekly
 ```

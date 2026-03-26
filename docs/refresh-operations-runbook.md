@@ -1,79 +1,40 @@
 # Refresh operations runbook
 
-This runbook defines Spark processing operations and recovery.
-Feature-serving and ML are separate pipelines and can run on different schedules.
-For the full platform flow, see `docs/data-platform-e2e-workflow.md`.
+This runbook defines Airflow refresh operations and recovery.
 
 ## Prerequisites
 
-- Spark config exists at `infra/spark/spark.env` (or equivalent env exports).
-- Docker is running and can access the target network.
+- `infra/spark/spark.env` configured
+- Trino running (`infra/trino/docker-compose.yml`)
+- Airflow running (`pnpm airflow:up`)
 
-## Pipeline entrypoints
+## Operational entrypoints
 
-Feature-serving:
+Default DAGs:
 
-```bash
-infra/spark/run_feature_pipeline.sh incremental
-```
+- `tf2_platform_e2e_daily`
+- `tf2_feature_serving_daily`
+- `tf2_ml_daily_or_weekly`
+- `tf2_iceberg_maintenance_weekly`
+- `tf2_backfill_manual`
 
-```bash
-infra/spark/run_feature_pipeline.sh full
-```
-
-ML:
-
-```bash
-infra/spark/run_ml_pipeline.sh incremental
-```
+Trigger full E2E:
 
 ```bash
-infra/spark/run_ml_pipeline.sh full
+pnpm airflow:trigger:e2e
 ```
 
-Combined (optional):
+Trigger manual backfill:
 
 ```bash
-infra/spark/run_processing_pipeline.sh incremental all
+infra/airflow/scripts/airflow.sh trigger tf2_backfill_manual '{"mode": "full", "pipeline": "all"}'
 ```
-
-Optional environment overrides:
-
-- `SPARK_ENV_FILE`: config file path (default empty; env vars can be exported directly)
-- `SPARK_NETWORK`: Docker network name (default `logs-explorer`)
-- `SPARK_IMAGE`: image tag (default `logs-explorer-spark-processing:latest`)
-- `REFRESH_DAYS`: rolling window for incremental mode (default `7`)
 
 ## Execution contract
 
-- Spark owns all refresh/materialisation for `features_*`, `serving_*`, and ML tables.
-- Trino is query and dashboard serving only.
-
-## Recommended cadence
-
-- Feature-serving pipeline: frequent (hourly/daily).
-- ML pipeline: separate cadence (daily/weekly or triggered by model lifecycle windows).
-- Iceberg maintenance: regular cadence (for example weekly) to compact files and trim old snapshots.
-
-## Quality gate
-
-Run serving quality checks after feature-serving pipeline execution:
-
-```bash
-docker exec -i tf2-trino trino < infra/trino/queries/quality/data_quality_checks.sql
-```
-
-Run ML readiness checks after ML pipeline execution:
-
-```bash
-infra/trino/queries/ml/run_ml_readiness_check.sh
-```
-
-Run Iceberg maintenance on regular cadence:
-
-```bash
-infra/trino/queries/ops/run_iceberg_maintenance.sh
-```
+- Spark processing is submitted by `SparkSubmitOperator`.
+- Quality/readiness/maintenance SQL is executed by `SQLExecuteQueryOperator` against Trino.
+- ML baseline training is executed by Airflow task runtime with explicit env contract.
 
 ## Run metadata
 
@@ -81,13 +42,7 @@ Spark writes step-level and pipeline-level status rows to:
 
 - `tf2.default.ops_pipeline_runs`
 
-Pipeline rows use step names:
-
-- `pipeline_feature_serving`
-- `pipeline_ml`
-- `pipeline_all` (combined runs)
-
-Useful queries:
+Useful query:
 
 ```sql
 SELECT
@@ -105,21 +60,10 @@ ORDER BY started_at DESC
 LIMIT 50;
 ```
 
-```sql
-SELECT
-  run_id,
-  MAX(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS has_failure,
-  MIN(started_at) AS pipeline_started_at,
-  MAX(finished_at) AS pipeline_finished_at
-FROM tf2.default.ops_pipeline_runs
-WHERE step_name LIKE 'pipeline_%'
-GROUP BY run_id
-ORDER BY pipeline_started_at DESC
-LIMIT 20;
-```
+## Recovery workflow
 
-## Recovery playbook
-
-- If incremental fails, inspect `ops_pipeline_runs.error_text`, fix root cause, rerun incremental.
-- If failures persist or schema drift is suspected, run `full` once, then rerun incremental.
-- If quality checks fail, do not publish dashboard updates; repair data issues and rerun.
+- Open the failed DAG run in Airflow UI.
+- Inspect failed task logs and error output.
+- Fix root cause (data, schema, config, or runtime).
+- Clear and rerun failed tasks from Airflow.
+- If repeated incremental failures indicate drift, trigger `tf2_backfill_manual` with full mode.

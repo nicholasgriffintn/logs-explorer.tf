@@ -6,6 +6,11 @@
   "scripts": {
     "check": "vp fmt && vp lint && vp run test -r && vp run build -r",
     "dev": "pnpm --filter @logs-explorer/ingest-service dev",
+    "airflow:up": "infra/airflow/scripts/airflow.sh up",
+    "airflow:down": "infra/airflow/scripts/airflow.sh down",
+    "airflow:status": "infra/airflow/scripts/airflow.sh status",
+    "airflow:dags": "infra/airflow/scripts/airflow.sh dags",
+    "airflow:trigger:e2e": "infra/airflow/scripts/airflow.sh trigger-e2e",
     "test": "vp run test -r",
     "build": "vp run build -r",
     "prepare": "vp config"

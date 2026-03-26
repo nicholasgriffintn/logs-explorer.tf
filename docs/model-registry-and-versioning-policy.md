@@ -13,17 +13,14 @@ Use Iceberg-backed registry tables in `tf2.default` for V1:
 Create them through the dedicated ML Spark pipeline:
 
 ```bash
-infra/spark/run_ml_pipeline.sh incremental
+infra/airflow/scripts/airflow.sh trigger tf2_ml_daily_or_weekly
 ```
 
 Baseline training can populate candidate rows directly:
 
 ```bash
-MODEL_VERSION=v1.0.0 infra/trino/queries/ml/run_ml_baseline_training.sh
+infra/airflow/scripts/airflow.sh trigger tf2_ml_daily_or_weekly '{"run_baseline_training": true, "model_version": "v1.0.0"}'
 ```
-
-This command runs training in a dedicated container image so dependency updates are
-managed in one place (`infra/ml/Dockerfile`, `infra/ml/requirements.txt`).
 
 Run ML pipeline cadence independently from feature-serving cadence.
 

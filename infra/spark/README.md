@@ -1,6 +1,7 @@
 # Spark processing
 
 Spark owns all processing. Trino is query-serving only.
+Spark jobs are submitted by Airflow using `SparkSubmitOperator`.
 
 ## Job layout
 
@@ -11,37 +12,22 @@ Spark jobs are grouped by domain under `infra/spark/jobs`:
 - `ml/`: ML snapshot and ML serving progress refresh
 - `ops/`: pipeline orchestration, run metadata, and shared Spark utilities
 
-Entrypoints remain:
+Entrypoints:
 
 - `infra/spark/jobs/build_processing.py`
 - `infra/spark/jobs/build_features.py`
 
-## Pipelines
+## Pipelines built by Airflow
 
-### 1) Feature and serving pipeline
-
-Builds:
+Feature-serving pipeline outputs:
 
 - `tf2.default.features_player_match`
 - `tf2.default.features_player_recent_form`
 - `tf2.default.serving_player_profiles`
 - `tf2.default.serving_map_overview_daily`
 - `tf2.default.serving_player_match_deep_dive`
-- `tf2.default.ops_pipeline_runs` entries for feature-serving steps
 
-Run:
-
-```bash
-infra/spark/run_feature_pipeline.sh incremental
-```
-
-```bash
-infra/spark/run_feature_pipeline.sh full
-```
-
-### 2) ML pipeline (separate schedule)
-
-Builds/refreshes:
+ML pipeline outputs:
 
 - `tf2.default.ml_training_dataset_snapshots`
 - `tf2.default.ml_training_player_match`
@@ -51,41 +37,18 @@ Builds/refreshes:
 - `tf2.default.serving_ml_model_registry`
 - `tf2.default.serving_ml_pipeline_progress_daily`
 - `tf2.default.serving_ml_prediction_quality_daily`
-- `tf2.default.ops_pipeline_runs` entries for ML steps
 
-Run:
+Run metadata table:
 
-```bash
-infra/spark/run_ml_pipeline.sh incremental
-```
+- `tf2.default.ops_pipeline_runs`
 
-```bash
-infra/spark/run_ml_pipeline.sh full
-```
+## Configuration contract
 
-### 3) Combined pipeline (optional)
+Airflow workers read Spark catalog/storage configuration from:
 
-Runs feature-serving and ML in one execution.
+- `infra/spark/spark.env`
 
-```bash
-infra/spark/run_processing_pipeline.sh incremental all
-```
-
-## Config
-
-Create a Spark env file:
-
-```bash
-cp infra/spark/spark.env.example infra/spark/spark.env
-```
-
-Run with that config:
-
-```bash
-SPARK_ENV_FILE=infra/spark/spark.env infra/spark/run_feature_pipeline.sh incremental
-```
-
-Required values (in env file or exported):
+Required values:
 
 - `CATALOG_URI`
 - `WAREHOUSE`
@@ -94,12 +57,9 @@ Required values (in env file or exported):
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 
-Optional values:
+Optional tuning values:
 
 - `REFRESH_DAYS` (default `7`)
-- `SPARK_IMAGE` (default `logs-explorer-spark-processing:latest`)
-- `SPARK_NETWORK` (default `logs-explorer`)
-- `SPARK_ENV_FILE` (env-file path)
 - `SPARK_MASTER` (default `local[4]`)
 - `SPARK_DRIVER_MEMORY` (default `6g`)
 - `SPARK_EXECUTOR_MEMORY` (default `6g`)
@@ -109,22 +69,7 @@ Optional values:
 - `SPARK_PARQUET_VECTORIZED_READER_ENABLED` (default `false`)
 - `SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED` (default `false`)
 
-## Vectorization trial
+## Cadence
 
-Vectorized readers are toggleable for compatibility testing.
-
-Run one pipeline with vectorization enabled:
-
-```bash
-SPARK_ICEBERG_VECTORIZATION_ENABLED=true \
-SPARK_PARQUET_VECTORIZED_READER_ENABLED=true \
-SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED=true \
-infra/spark/run_feature_pipeline.sh incremental
-```
-
-If this reintroduces runtime issues, leave the defaults disabled and capture the failing stack trace before re-enabling.
-
-## Recommended cadence
-
-- Feature-serving pipeline: frequent (hourly/daily, depending on ingestion volume).
-- ML pipeline: separate and less frequent (for example daily/weekly retraining windows).
+- Feature-serving DAG: frequent cadence (hourly/daily)
+- ML DAG: separate cadence (daily/weekly)
