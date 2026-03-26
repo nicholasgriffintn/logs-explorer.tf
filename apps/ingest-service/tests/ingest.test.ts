@@ -42,6 +42,18 @@ class FlakyMemoryStream<TRecord> extends MemoryStream<TRecord> {
   }
 }
 
+class FailOnceMemoryStream<TRecord> extends MemoryStream<TRecord> {
+  private hasFailed = false;
+
+  async send(records: TRecord[]): Promise<void> {
+    if (!this.hasFailed) {
+      this.hasFailed = true;
+      throw new Error("hard pipeline send failure");
+    }
+    await super.send(records);
+  }
+}
+
 function listPayload(logIds: number[]): unknown {
   return {
     success: true,
@@ -322,6 +334,103 @@ test("runIngest retries transient pipeline overload errors", async () => {
   expect(result.emittedCoreLogs).toBe(2);
   expect(result.failedLogs).toBe(0);
   expect(logsStream.batches.flat()).toHaveLength(2);
+});
+
+test("runIngest suppresses failed logs from new candidates until retry is due", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+  const calls: string[] = [];
+
+  await kv.put(
+    CURSOR_STATE_KEY,
+    JSON.stringify({
+      lastIngestedLogId: 4031050,
+      failedLogs: {
+        "4031052": {
+          summary: {
+            id: 4031052,
+            title: "log-4031052",
+            map: "cp_snakewater_final1",
+            date: 1774213787,
+            views: 0,
+            players: 13,
+          },
+          attempts: 1,
+          nextAttemptAtEpochMs: Date.parse("2026-03-22T12:10:00.000Z"),
+          lastError: "temporary failure",
+        },
+      },
+      updatedAt: "2026-03-22T12:00:00.000Z",
+    }),
+  );
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const result = await runIngest(env, {
+    fetchFn: makeFetchStub(calls),
+    now: new Date("2026-03-22T12:00:00.000Z"),
+  });
+
+  expect(result.emittedCoreLogs).toBe(1);
+  expect(result.failedLogs).toBe(1);
+  expect(logsStream.batches.flat()).toHaveLength(1);
+  expect(calls.some((url) => url.includes("/log/4031052"))).toBe(false);
+  expect(calls.some((url) => url.includes("/log/4031051"))).toBe(true);
+});
+
+test("runIngest resumes failed logs without re-emitting already delivered datasets", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new FailOnceMemoryStream<unknown>();
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const first = await runIngest(env, {
+    fetchFn: makeFetchStubWithDetail([], [4031052], (logId) => detailPayload(logId)),
+    now: new Date("2026-03-22T12:00:00.000Z"),
+  });
+
+  expect(first.emittedCoreLogs).toBe(1);
+  expect(first.emittedChatMessages).toBe(2);
+  expect(first.emittedPlayerSummaries).toBe(0);
+  expect(first.failedLogs).toBe(1);
+  expect(first.lastIngestedLogId).toBe(0);
+
+  const second = await runIngest(env, {
+    fetchFn: makeFetchStubWithDetail([], [4031052], (logId) => detailPayload(logId)),
+    now: new Date("2026-03-22T12:00:11.000Z"),
+  });
+
+  expect(second.emittedCoreLogs).toBe(0);
+  expect(second.emittedChatMessages).toBe(0);
+  expect(second.emittedPlayerSummaries).toBe(1);
+  expect(second.failedLogs).toBe(0);
+  expect(second.lastIngestedLogId).toBe(4031052);
+
+  expect(logsStream.batches.flat()).toHaveLength(1);
+  expect(chatStream.batches.flat()).toHaveLength(2);
+  expect(playersStream.batches.flat()).toHaveLength(1);
 });
 
 test("runIngest caps due retries per run", async () => {

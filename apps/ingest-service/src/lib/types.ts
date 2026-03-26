@@ -33,6 +33,12 @@ export interface FullHistoryQueueMessage {
   offset: number;
 }
 
+export interface DeliveryState {
+  logs: boolean;
+  chat: boolean;
+  players: boolean;
+}
+
 export interface IngestEnv {
   INGEST_CURSOR_KV: KeyValueStore;
   TF2_LOGS_STREAM: PipelinesStreamBinding<NormalizedLogRecord>;
@@ -54,6 +60,7 @@ export interface FailedLogState {
   attempts: number;
   nextAttemptAtEpochMs: number;
   lastError: string;
+  deliveredDatasets: DeliveryState;
 }
 
 export interface IngestState {

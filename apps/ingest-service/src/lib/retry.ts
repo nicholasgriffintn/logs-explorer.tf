@@ -3,7 +3,19 @@ import {
   sortSummariesAscending,
   type LogsTfLogSummary,
 } from "@logs-explorer/tf2-log-model";
-import type { IngestState } from "./types";
+import type { DeliveryState, FailedLogState, IngestState } from "./types";
+
+function toDeliveryState(value: DeliveryState | undefined): DeliveryState {
+  return {
+    logs: value?.logs === true,
+    chat: value?.chat === true,
+    players: value?.players === true,
+  };
+}
+
+export function deliveryStateFromFailure(failed: FailedLogState | undefined): DeliveryState {
+  return toDeliveryState(failed?.deliveredDatasets);
+}
 
 export function computeRetryDelayMs(attempts: number): number {
   const unclamped = 10_000 * 2 ** Math.max(0, attempts - 1);
@@ -41,6 +53,7 @@ export function updateFailure(
   summary: LogsTfLogSummary,
   message: string,
   nowEpochMs: number,
+  deliveredDatasets?: DeliveryState,
 ): void {
   const key = String(summary.id);
   const existing = state.failedLogs[key];
@@ -51,6 +64,7 @@ export function updateFailure(
     attempts,
     nextAttemptAtEpochMs: nowEpochMs + computeRetryDelayMs(attempts),
     lastError: message,
+    deliveredDatasets: toDeliveryState(deliveredDatasets ?? existing?.deliveredDatasets),
   };
 }
 

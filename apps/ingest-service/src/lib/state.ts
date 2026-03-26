@@ -51,11 +51,18 @@ function toFailedLogState(value: unknown): FailedLogState | null {
     return null;
   }
 
+  const delivered = isObject(value.deliveredDatasets) ? value.deliveredDatasets : {};
+
   return {
     summary: parsedSummary,
     attempts: Number(value.attempts),
     nextAttemptAtEpochMs: Number(value.nextAttemptAtEpochMs),
     lastError: String(value.lastError),
+    deliveredDatasets: {
+      logs: delivered.logs === true,
+      chat: delivered.chat === true,
+      players: delivered.players === true,
+    },
   };
 }
 

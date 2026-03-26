@@ -11,6 +11,7 @@ import { emitDatasetBatch } from "./lib/emitter";
 import { fetchJsonWithRetry, toDetailUrl } from "./lib/http";
 import {
   clearFailure,
+  deliveryStateFromFailure,
   computeRetryDelayMs,
   dueRetrySummaries,
   mergeCandidates,
@@ -90,7 +91,17 @@ export async function runIngest(
     candidates = fullHistoryBatch.summaries;
     nextBackfillOffset = fullHistoryBatch.nextOffset;
   } else {
-    newSummaries = await collectNewSummaries(fetchFn, config, state.lastIngestedLogId);
+    const fetchedNewSummaries = await collectNewSummaries(fetchFn, config, state.lastIngestedLogId);
+    const failedLogIds = new Set(Object.keys(state.failedLogs).map((id) => Number(id)));
+    newSummaries = fetchedNewSummaries.filter((summary) => !failedLogIds.has(summary.id));
+
+    const suppressedPendingFailures = fetchedNewSummaries.length - newSummaries.length;
+    if (suppressedPendingFailures > 0) {
+      console.log(
+        `Suppressed ${suppressedPendingFailures} failed logs from new-candidate selection until retry backoff allows them`,
+      );
+    }
+
     const dueRetries = dueRetrySummaries(state, nowEpochMs);
     retrySummaries = dueRetries.slice(0, config.maxRetryLogsPerRun);
     if (dueRetries.length > retrySummaries.length) {
@@ -123,6 +134,8 @@ export async function runIngest(
   }
 
   for (const summary of candidates) {
+    const deliveredDatasets = deliveryStateFromFailure(state.failedLogs[String(summary.id)]);
+
     try {
       const rawDetail = await fetchJsonWithRetry(
         fetchFn,
@@ -136,28 +149,38 @@ export async function runIngest(
       const playerRecords = extractPlayerSummaryRecords(summary, detail, nowIso);
 
       if (!options.dryRun) {
-        const emittedCoreForLog = await emitDatasetBatch(
-          "logs",
-          env,
-          [coreRecord],
-          config.pipelineBatchSize,
-        );
-        const emittedChatForLog = await emitDatasetBatch(
-          "chat",
-          env,
-          chatRecords,
-          config.pipelineBatchSize,
-        );
-        const emittedPlayersForLog = await emitDatasetBatch(
-          "players",
-          env,
-          playerRecords,
-          config.pipelineBatchSize,
-        );
+        if (!deliveredDatasets.logs) {
+          const emittedCoreForLog = await emitDatasetBatch(
+            "logs",
+            env,
+            [coreRecord],
+            config.pipelineBatchSize,
+          );
+          emittedCoreLogs += emittedCoreForLog;
+          deliveredDatasets.logs = true;
+        }
 
-        emittedCoreLogs += emittedCoreForLog;
-        emittedChatMessages += emittedChatForLog;
-        emittedPlayerSummaries += emittedPlayersForLog;
+        if (!deliveredDatasets.chat) {
+          const emittedChatForLog = await emitDatasetBatch(
+            "chat",
+            env,
+            chatRecords,
+            config.pipelineBatchSize,
+          );
+          emittedChatMessages += emittedChatForLog;
+          deliveredDatasets.chat = true;
+        }
+
+        if (!deliveredDatasets.players) {
+          const emittedPlayersForLog = await emitDatasetBatch(
+            "players",
+            env,
+            playerRecords,
+            config.pipelineBatchSize,
+          );
+          emittedPlayerSummaries += emittedPlayersForLog;
+          deliveredDatasets.players = true;
+        }
       }
 
       if (!options.dryRun) {
@@ -167,7 +190,7 @@ export async function runIngest(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to process log ${summary.id}: ${message}`);
-      updateFailure(state, summary, message, nowEpochMs);
+      updateFailure(state, summary, message, nowEpochMs, deliveredDatasets);
     }
 
     await sleep(config.requestDelayMs);
