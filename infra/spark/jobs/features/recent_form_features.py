@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession
 
-from ops.spark_utils import FEATURES_RECENT_FORM_TABLE, table_exists
+from ops.spark_utils import FEATURES_RECENT_FORM_TABLE, run_delete_insert_with_retry, table_exists
 
 
 def create_recent_form_source_view(spark: SparkSession, mode: str, refresh_days: int) -> None:
@@ -153,15 +153,15 @@ def refresh_features_player_recent_form(spark: SparkSession, mode: str) -> None:
         )
         return
 
-    spark.sql(
-        f"""
+    run_delete_insert_with_retry(
+        spark=spark,
+        table_name=FEATURES_RECENT_FORM_TABLE,
+        delete_sql=f"""
         DELETE FROM {FEATURES_RECENT_FORM_TABLE}
         WHERE steamid IN (SELECT steamid FROM changed_players)
-        """
-    )
-    spark.sql(
-        f"""
+        """,
+        insert_sql=f"""
         INSERT INTO {FEATURES_RECENT_FORM_TABLE}
         SELECT * FROM features_player_recent_form_source
-        """
+        """,
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession
 
-from ops.spark_utils import FEATURES_MATCH_TABLE, table_exists
+from ops.spark_utils import FEATURES_MATCH_TABLE, run_delete_insert_with_retry, table_exists
 
 
 def create_match_source_view(spark: SparkSession) -> None:
@@ -137,15 +137,15 @@ def refresh_features_player_match(spark: SparkSession, mode: str) -> None:
         )
         return
 
-    spark.sql(
-        f"""
+    run_delete_insert_with_retry(
+        spark=spark,
+        table_name=FEATURES_MATCH_TABLE,
+        delete_sql=f"""
         DELETE FROM {FEATURES_MATCH_TABLE}
         WHERE logid IN (SELECT logid FROM changed_logs)
-        """
-    )
-    spark.sql(
-        f"""
+        """,
+        insert_sql=f"""
         INSERT INTO {FEATURES_MATCH_TABLE}
         SELECT * FROM features_player_match_source
-        """
+        """,
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession
 
-from ops.spark_utils import table_exists
+from ops.spark_utils import run_delete_insert_with_retry, table_exists
 
 
 SERVING_PLAYER_PROFILES_TABLE = "tf2.default.serving_player_profiles"
@@ -202,17 +202,17 @@ def refresh_serving_player_profiles(spark: SparkSession, mode: str, refresh_days
         )
         return
 
-    spark.sql(
-        f"""
+    run_delete_insert_with_retry(
+        spark=spark,
+        table_name=SERVING_PLAYER_PROFILES_TABLE,
+        delete_sql=f"""
         DELETE FROM {SERVING_PLAYER_PROFILES_TABLE}
         WHERE steamid IN (SELECT steamid FROM changed_players)
-        """
-    )
-    spark.sql(
-        f"""
+        """,
+        insert_sql=f"""
         INSERT INTO {SERVING_PLAYER_PROFILES_TABLE}
         SELECT * FROM serving_player_profiles_source
-        """
+        """,
     )
 
 
@@ -344,17 +344,17 @@ def refresh_serving_map_overview_daily(spark: SparkSession, mode: str, refresh_d
         )
         return
 
-    spark.sql(
-        f"""
+    run_delete_insert_with_retry(
+        spark=spark,
+        table_name=SERVING_MAP_OVERVIEW_TABLE,
+        delete_sql=f"""
         DELETE FROM {SERVING_MAP_OVERVIEW_TABLE}
         WHERE match_date >= (SELECT refresh_start_date FROM map_bounds)
-        """
-    )
-    spark.sql(
-        f"""
+        """,
+        insert_sql=f"""
         INSERT INTO {SERVING_MAP_OVERVIEW_TABLE}
         SELECT * FROM serving_map_overview_daily_source
-        """
+        """,
     )
 
 
@@ -535,15 +535,15 @@ def refresh_serving_player_match_deep_dive(spark: SparkSession, mode: str, refre
         )
         return
 
-    spark.sql(
-        f"""
+    run_delete_insert_with_retry(
+        spark=spark,
+        table_name=SERVING_DEEP_DIVE_TABLE,
+        delete_sql=f"""
         DELETE FROM {SERVING_DEEP_DIVE_TABLE}
         WHERE match_date >= (SELECT refresh_start_date FROM deep_dive_bounds)
-        """
-    )
-    spark.sql(
-        f"""
+        """,
+        insert_sql=f"""
         INSERT INTO {SERVING_DEEP_DIVE_TABLE}
         SELECT * FROM serving_player_match_deep_dive_source
-        """
+        """,
     )
