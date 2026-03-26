@@ -10,6 +10,40 @@ SERVING_MAP_OVERVIEW_TABLE = "tf2.default.serving_map_overview_daily"
 SERVING_DEEP_DIVE_TABLE = "tf2.default.serving_player_match_deep_dive"
 
 
+def _create_serving_logs_base_view(spark: SparkSession) -> None:
+    spark.sql(
+        """
+        CREATE OR REPLACE TEMP VIEW serving_logs_base AS
+        SELECT
+          ranked.logid,
+          ranked.map,
+          ranked.sourcedateiso,
+          ranked.durationseconds,
+          ranked.redscore,
+          ranked.bluescore
+        FROM (
+          SELECT
+            record_latest.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY record_latest.logid
+              ORDER BY record_latest.__ingest_ts DESC, record_latest.sourcedateepochseconds DESC
+            ) AS rn_log
+          FROM (
+            SELECT
+              l.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY l.recordid
+                ORDER BY l.__ingest_ts DESC
+              ) AS rn_record
+            FROM tf2.default.logs l
+          ) record_latest
+          WHERE record_latest.rn_record = 1
+        ) ranked
+        WHERE ranked.rn_log = 1
+        """
+    )
+
+
 def _create_changed_players_view(spark: SparkSession, mode: str, refresh_days: int) -> None:
     if mode == "full":
         spark.sql(
@@ -199,12 +233,13 @@ def _create_map_bounds_view(spark: SparkSession, mode: str, refresh_days: int) -
           DATE_SUB(MAX(CAST(TO_TIMESTAMP(sourcedateiso) AS DATE)), {refresh_days}),
           CAST('1970-01-01' AS DATE)
         ) AS refresh_start_date
-        FROM tf2.default.logs
+        FROM serving_logs_base
         """
     )
 
 
 def refresh_serving_map_overview_daily(spark: SparkSession, mode: str, refresh_days: int) -> None:
+    _create_serving_logs_base_view(spark)
     _create_map_bounds_view(spark, mode, refresh_days)
 
     spark.sql(
@@ -216,7 +251,7 @@ def refresh_serving_map_overview_daily(spark: SparkSession, mode: str, refresh_d
           CAST(TO_TIMESTAMP(l.sourcedateiso) AS DATE) AS match_date,
           COALESCE(l.durationseconds, 0) AS duration_seconds,
           ABS(COALESCE(l.redscore, 0) - COALESCE(l.bluescore, 0)) AS score_delta
-        FROM tf2.default.logs l
+        FROM serving_logs_base l
         CROSS JOIN map_bounds b
         WHERE CAST(TO_TIMESTAMP(l.sourcedateiso) AS DATE) >= b.refresh_start_date
         """
@@ -240,7 +275,7 @@ def refresh_serving_map_overview_daily(spark: SparkSession, mode: str, refresh_d
         SELECT
           gb.map,
           gb.match_date,
-          COUNT(*) AS games,
+          COUNT(DISTINCT gb.logid) AS games,
           AVG(gb.duration_seconds) / 60.0 AS avg_duration_minutes,
           AVG(COALESCE(kbg.total_kills, 0)) AS avg_total_kills,
           AVG(COALESCE(kbg.total_kills, 0) / NULLIF(gb.duration_seconds / 60.0, 0)) AS avg_kills_per_minute,
