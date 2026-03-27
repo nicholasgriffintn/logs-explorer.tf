@@ -1,0 +1,25 @@
+{
+  "app": "node dist/bin/aws-platform.js",
+  "context": {
+    "environment": "dev",
+    "projectName": "logs-explorer",
+    "emrReleaseLabel": "emr-7.12.0",
+    "mwaaAirflowVersion": "3.0.6",
+    "enableMwaa": false,
+    "publicUis": false,
+    "mwaaEnvironmentClass": "mw1.micro",
+    "mwaaMinWorkers": 1,
+    "mwaaMaxWorkers": 1,
+    "mwaaSchedulers": 1,
+    "trinoCoreInstanceCount": 1,
+    "trinoInstanceType": "m6i.xlarge",
+    "metadataDbInstanceType": "t4g.micro",
+    "metadataDbAllocatedStorageGiB": 20,
+    "metadataDbMaxAllocatedStorageGiB": 100,
+    "marquezApiImage": "marquezproject/marquez:0.51.1",
+    "marquezWebImage": "marquezproject/marquez-web:0.51.1",
+    "marquezApiDesiredCount": 1,
+    "marquezApiMinCapacity": 1,
+    "marquezApiMaxCapacity": 2
+  }
+}

@@ -13,6 +13,7 @@ Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` 
 - `infra/openlineage`: local OpenLineage backend runtime (Marquez + web UI).
 - `infra/trino`: local Trino stack and catalog config template for querying R2 Data Catalog.
 - `infra/spark`: Spark processing pipelines for `features_*`, `serving_*`, and ML table materialisation.
+- `infra/aws`: AWS CDK stack for EMR Trino, ECS Superset, ECS Marquez/OpenLineage, and MWAA.
 
 ## Setup
 
@@ -70,6 +71,12 @@ Follow:
 pnpm --filter @logs-explorer/ingest-service dev
 ```
 
+### 8. (Optional) Deploy AWS-managed platform components
+
+See:
+
+- `infra/aws/README.md`
+
 ## Analytics and dashboards
 
 - End-to-end Airflow-first run flow: `docs/data-platform-e2e-workflow.md`
@@ -99,6 +106,8 @@ pnpm --filter @logs-explorer/ingest-service dev
 - `pnpm airflow:dags`: list registered DAGs
 - `pnpm airflow:trigger:e2e`: trigger the full E2E DAG
 - `pnpm airflow:down`: stop Airflow stack
+- `pnpm aws:cdk:synth`: synthesise AWS CDK platform template
+- `pnpm aws:cdk:deploy`: deploy AWS CDK platform stack
 - `pnpm test`: run tests across the monorepo
 - `pnpm build`: run build scripts across the monorepo
 - `pnpm check`: format, lint, test, build

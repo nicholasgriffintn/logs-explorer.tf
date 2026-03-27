@@ -17,6 +17,8 @@
     "airflow:trigger:e2e": "infra/airflow/scripts/airflow.sh trigger-e2e",
     "test": "vp run test -r",
     "build": "vp run build -r",
+    "aws:cdk:synth": "pnpm --filter @logs-explorer/aws synth",
+    "aws:cdk:deploy": "pnpm --filter @logs-explorer/aws deploy",
     "prepare": "vp config"
   },
   "devDependencies": {
