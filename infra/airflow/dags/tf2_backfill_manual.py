@@ -9,7 +9,6 @@ from tf2_common import (
     PIPELINE_TIMEOUT,
     REFRESH_DAYS,
     SPARK_APPLICATION,
-    SPARK_PACKAGES,
     START_DATE,
     TF2_TRINO_CONN_ID,
     assert_sql_task_has_no_failures,
@@ -19,6 +18,7 @@ from tf2_common import (
     spark_executor_memory,
     spark_conf,
     spark_master,
+    spark_packages,
     validate_runtime_config,
 )
 
@@ -61,7 +61,7 @@ with DAG(
             "--pipeline",
             "{{ dag_run.conf.get('pipeline', 'all') }}",
         ],
-        packages=SPARK_PACKAGES,
+        packages=spark_packages(),
         conf=spark_conf(),
         executor_memory=spark_executor_memory(),
         driver_memory=spark_driver_memory(),

@@ -31,6 +31,12 @@
     "LOGS_TF_MAX_RETRY_LOGS_PER_RUN": "10",
     "PIPELINES_BATCH_SIZE": "50",
     "LOGS_TF_MAX_FAILED_LOGS": "500",
+    "OPENLINEAGE_ENABLED": "false",
+    "OPENLINEAGE_URL": "http://localhost:5000",
+    "OPENLINEAGE_ENDPOINT": "api/v1/lineage",
+    "OPENLINEAGE_NAMESPACE": "tf2-ingest",
+    "OPENLINEAGE_JOB_NAME": "logs_tf_ingest",
+    "OPENLINEAGE_DATASET_NAMESPACE": "tf2",
   },
   "kv_namespaces": [
     {

@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:14
+    container_name: tf2-marquez-postgres
+    environment:
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: marquez
+      POSTGRES_DB: marquez
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "marquez"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - openlineage_postgres:/var/lib/postgresql/data
+    networks:
+      - default
+      - logs-explorer
+
+  marquez:
+    image: ${OPENLINEAGE_MARQUEZ_IMAGE:-marquezproject/marquez:0.51.1}
+    platform: ${OPENLINEAGE_PLATFORM:-linux/amd64}
+    container_name: tf2-marquez-api
+    environment:
+      MARQUEZ_PORT: "5000"
+      MARQUEZ_ADMIN_PORT: "5001"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: marquez
+      POSTGRES_DB: marquez
+      SEARCH_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "${OPENLINEAGE_API_PORT:-5000}:5000"
+      - "${OPENLINEAGE_ADMIN_PORT:-5001}:5001"
+    networks:
+      default:
+      logs-explorer:
+        aliases:
+          - marquez
+
+  marquez-web:
+    image: ${OPENLINEAGE_WEB_IMAGE:-marquezproject/marquez-web:0.51.1}
+    platform: ${OPENLINEAGE_PLATFORM:-linux/amd64}
+    container_name: tf2-marquez-web
+    environment:
+      MARQUEZ_HOST: marquez
+      MARQUEZ_PORT: "5000"
+      WEB_PORT: "3000"
+    depends_on:
+      marquez:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "${OPENLINEAGE_WEB_PORT:-3000}:3000"
+    networks:
+      - default
+      - logs-explorer
+
+volumes:
+  openlineage_postgres:
+
+networks:
+  logs-explorer:
+    external: true

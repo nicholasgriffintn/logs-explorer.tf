@@ -9,7 +9,6 @@ from tf2_common import (
     PIPELINE_TIMEOUT,
     REFRESH_DAYS,
     SPARK_APPLICATION,
-    SPARK_PACKAGES,
     START_DATE,
     TF2_AIRFLOW_FEATURE_CRON,
     TF2_TRINO_CONN_ID,
@@ -19,6 +18,7 @@ from tf2_common import (
     spark_executor_memory,
     spark_conf,
     spark_master,
+    spark_packages,
     validate_runtime_config,
 )
 
@@ -43,7 +43,7 @@ with DAG(
         conn_id="spark_default",
         application=SPARK_APPLICATION,
         application_args=["--mode", "incremental", "--refresh-days", REFRESH_DAYS, "--pipeline", "feature-serving"],
-        packages=SPARK_PACKAGES,
+        packages=spark_packages(),
         conf=spark_conf(),
         executor_memory=spark_executor_memory(),
         driver_memory=spark_driver_memory(),

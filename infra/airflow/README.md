@@ -21,6 +21,29 @@ DAGs use native Airflow providers:
 - `SQLExecuteQueryOperator` for Trino quality/readiness/maintenance SQL
 - `PythonOperator` for DAG control logic and ML baseline training execution
 
+## OpenLineage
+
+OpenLineage is wired into Airflow and Spark submit tasks.
+
+- Airflow provider: `apache-airflow-providers-openlineage` (installed in `infra/airflow/Dockerfile`)
+- Spark listener: `io.openlineage:openlineage-spark_2.12` (injected via DAG `packages`)
+- Parent linkage: enabled through Airflow OpenLineage Spark injection flags
+
+Configure in `infra/airflow/airflow.env`:
+
+- `OPENLINEAGE_TRANSPORT` (JSON string; required for event delivery)
+- `OPENLINEAGE_DISABLED` (`false` by default)
+- `OPENLINEAGE_NAMESPACE` (Airflow job namespace)
+- `OPENLINEAGE_SPARK_NAMESPACE` (Spark job namespace)
+- `OPENLINEAGE_SPARK_PACKAGE_VERSION` (default `1.36.0`)
+
+Example transport value:
+
+```bash
+OPENLINEAGE_TRANSPORT={"type":"http","url":"http://marquez:5000","endpoint":"api/v1/lineage"}
+OPENLINEAGE_DISABLED=false
+```
+
 ## Prerequisites
 
 - Docker Desktop or Docker Engine with Compose v2
@@ -35,7 +58,13 @@ DAGs use native Airflow providers:
 cp infra/airflow/airflow.env.example infra/airflow/airflow.env
 ```
 
-2. Start Airflow:
+2. Start OpenLineage backend:
+
+```bash
+pnpm openlineage:up
+```
+
+3. Start Airflow:
 
 ```bash
 pnpm airflow:up
@@ -43,13 +72,13 @@ pnpm airflow:up
 
 `airflow-init` bootstraps Airflow Variables from `infra/spark/spark.env` + `infra/airflow/airflow.env`, and creates required Airflow Connections.
 
-3. Verify DAG registration:
+4. Verify DAG registration:
 
 ```bash
 pnpm airflow:dags
 ```
 
-4. Open UI:
+5. Open UI:
 
 - `http://localhost:8080`
 - Username/password from `infra/airflow/airflow.env`

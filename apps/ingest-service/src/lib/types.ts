@@ -53,6 +53,13 @@ export interface IngestEnv {
   LOGS_TF_MAX_FAILED_LOGS?: string;
   LOGS_TF_MAX_RETRY_LOGS_PER_RUN?: string;
   PIPELINES_BATCH_SIZE?: string;
+  OPENLINEAGE_ENABLED?: string;
+  OPENLINEAGE_URL?: string;
+  OPENLINEAGE_ENDPOINT?: string;
+  OPENLINEAGE_NAMESPACE?: string;
+  OPENLINEAGE_JOB_NAME?: string;
+  OPENLINEAGE_DATASET_NAMESPACE?: string;
+  OPENLINEAGE_PRODUCER_URL?: string;
 }
 
 export interface FailedLogState {
@@ -97,6 +104,7 @@ export interface RunIngestOptions {
   dryRun?: boolean;
   mode?: IngestMode;
   fullHistoryOffset?: number;
+  trigger?: "scheduled" | "queue" | "http";
   now?: Date;
   fetchFn?: typeof fetch;
 }

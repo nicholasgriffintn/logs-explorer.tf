@@ -1,6 +1,6 @@
 # TF2 Logs Explorer
 
-Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` using Cloudflare Pipelines, R2 Data Catalog, Apache Spark, Apache Airflow, and Apache Trino.
+Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` using Cloudflare Pipelines, R2 Data Catalog, Apache Spark, Apache Airflow, Apache Trino, and OpenLineage.
 
 > NOTE: This was built with the help of AI, I did quite a bit of work but the AI was also super helpful. I'm sharing this as an example of how these sorts of systems can be built with Cloudflare services and also as a platform to have a bit of fun with myself.
 
@@ -10,6 +10,7 @@ Platform for ingesting and exploring public Team Fortress 2 logs from `logs.tf` 
 - `packages/tf2-log-model`: shared runtime validation + normalisation for logs list and detail payloads.
 - `infra/cloudflare/pipelines`: stream schema and setup instructions for Cloudflare Pipelines.
 - `infra/airflow`: orchestration runtime, DAGs, and operational command wrappers.
+- `infra/openlineage`: local OpenLineage backend runtime (Marquez + web UI).
 - `infra/trino`: local Trino stack and catalog config template for querying R2 Data Catalog.
 - `infra/spark`: Spark processing pipelines for `features_*`, `serving_*`, and ML table materialisation.
 
@@ -51,13 +52,19 @@ Follow:
 - `infra/spark/README.md`
 - `infra/trino/README.md`
 
-### 5. Configure and start Airflow orchestration
+### 5. Configure and start OpenLineage
+
+Follow:
+
+- `infra/openlineage/README.md`
+
+### 6. Configure and start Airflow orchestration
 
 Follow:
 
 - `infra/airflow/README.md`
 
-### 6. Run ingest service locally
+### 7. Run ingest service locally
 
 ```bash
 pnpm --filter @logs-explorer/ingest-service dev
@@ -84,6 +91,9 @@ pnpm --filter @logs-explorer/ingest-service dev
 ## Development commands
 
 - `pnpm dev`: run ingest service locally
+- `pnpm openlineage:up`: start Marquez/OpenLineage stack
+- `pnpm openlineage:status`: show OpenLineage service status
+- `pnpm openlineage:down`: stop OpenLineage stack
 - `pnpm airflow:up`: start full Airflow stack
 - `pnpm airflow:status`: show Airflow service status
 - `pnpm airflow:dags`: list registered DAGs

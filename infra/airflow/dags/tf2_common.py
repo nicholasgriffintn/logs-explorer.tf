@@ -21,12 +21,12 @@ TF2_AIRFLOW_MAINTENANCE_CRON = Variable.get("TF2_AIRFLOW_MAINTENANCE_CRON", defa
 
 REFRESH_DAYS = Variable.get("REFRESH_DAYS", default_var="7")
 SPARK_APPLICATION = f"{TF2_REPO_ROOT}/infra/spark/jobs/build_processing.py"
-SPARK_PACKAGES = (
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,"
-    "org.apache.hadoop:hadoop-aws:3.3.4,"
-    "software.amazon.awssdk:bundle:2.20.160,"
-    "software.amazon.awssdk:url-connection-client:2.20.160"
-)
+SPARK_BASE_PACKAGES = [
+    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2",
+    "org.apache.hadoop:hadoop-aws:3.3.4",
+    "software.amazon.awssdk:bundle:2.20.160",
+    "software.amazon.awssdk:url-connection-client:2.20.160",
+]
 
 START_DATE = datetime(2025, 1, 1)
 
@@ -123,7 +123,7 @@ def dag_conf_string(context: dict, key: str, default: str) -> str:
 
 
 def spark_conf() -> dict[str, str]:
-    return {
+    conf = {
         "spark.sql.adaptive.enabled": "true",
         "spark.sql.adaptive.coalescePartitions.enabled": "true",
         "spark.sql.shuffle.partitions": _variable("SPARK_SQL_SHUFFLE_PARTITIONS", "512"),
@@ -150,6 +150,20 @@ def spark_conf() -> dict[str, str]:
         "spark.hadoop.fs.s3a.region": "auto",
         "spark.hadoop.fs.s3a.connection.ssl.enabled": "true",
     }
+
+    if variable_bool("OPENLINEAGE_SPARK_ENABLED", True):
+        conf["spark.extraListeners"] = "io.openlineage.spark.agent.OpenLineageSparkListener"
+        conf["spark.openlineage.namespace"] = _variable("OPENLINEAGE_SPARK_NAMESPACE", "tf2-spark")
+
+    return conf
+
+
+def spark_packages() -> str:
+    packages = list(SPARK_BASE_PACKAGES)
+    if variable_bool("OPENLINEAGE_SPARK_ENABLED", True):
+        openlineage_package_version = _variable("OPENLINEAGE_SPARK_PACKAGE_VERSION", "1.36.0")
+        packages.append(f"io.openlineage:openlineage-spark_2.12:{openlineage_package_version}")
+    return ",".join(packages)
 
 
 def spark_master() -> str:

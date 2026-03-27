@@ -35,7 +35,11 @@ USAGE
 }
 
 compose() {
-  docker compose -f "$COMPOSE_FILE" "$@"
+  if [[ -f "$AIRFLOW_ENV_FILE" ]]; then
+    docker compose --env-file "$AIRFLOW_ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  else
+    docker compose -f "$COMPOSE_FILE" "$@"
+  fi
 }
 
 ensure_airflow_env() {

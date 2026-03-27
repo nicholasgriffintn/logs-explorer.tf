@@ -81,6 +81,19 @@ Schema: `infra/cloudflare/pipelines/tf2-player-stream.schema.json`
 This service handles ingestion only.
 All downstream processing, quality gates, maintenance, and ML orchestration are managed in Airflow (`infra/airflow`).
 
+## OpenLineage emission
+
+The worker can emit OpenLineage events (`START`, `COMPLETE`, `FAIL`) for each ingest run.
+
+Set these vars to enable it:
+
+- `OPENLINEAGE_ENABLED=true`
+- `OPENLINEAGE_URL` (for local Marquez: `http://localhost:5000`)
+- `OPENLINEAGE_ENDPOINT` (default `api/v1/lineage`)
+- `OPENLINEAGE_NAMESPACE` (default `tf2-ingest`)
+- `OPENLINEAGE_JOB_NAME` (default `logs_tf_ingest`)
+- `OPENLINEAGE_DATASET_NAMESPACE` (default `tf2`)
+
 ## Endpoints
 
 - `GET /health`

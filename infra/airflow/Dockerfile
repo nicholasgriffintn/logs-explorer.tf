@@ -14,6 +14,7 @@ COPY infra/ml/requirements.txt /tmp/ml-requirements.txt
 
 RUN pip install --no-cache-dir \
   apache-airflow-providers-apache-spark \
+  apache-airflow-providers-openlineage \
   apache-airflow-providers-trino \
   pyspark==3.5.5 \
   -r /tmp/ml-requirements.txt

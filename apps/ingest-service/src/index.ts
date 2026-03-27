@@ -67,7 +67,7 @@ async function enqueueFullHistoryOffset(env: IngestEnv, offset: number): Promise
 export default {
   async scheduled(_event: unknown, env: IngestEnv, ctx: ExecutionContextLike): Promise<void> {
     ctx.waitUntil(
-      runIngest(env)
+      runIngest(env, { trigger: "scheduled" })
         .then((result) => {
           console.info("Ingest run complete", result);
         })
@@ -89,6 +89,7 @@ export default {
       const result = await runIngest(env, {
         mode: "full-history",
         fullHistoryOffset: parsed.offset,
+        trigger: "queue",
       });
 
       console.info("Completed full-history ingest chunk", {
@@ -151,6 +152,7 @@ export default {
           dryRun,
           mode,
           fullHistoryOffset: mode === "full-history" ? fullHistoryOffset : undefined,
+          trigger: "http",
         });
         return jsonResponse(200, {
           ok: true,
