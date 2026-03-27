@@ -70,7 +70,7 @@ with DAG(
     serving_quality_checks_sql = SQLExecuteQueryOperator(
         task_id="serving_quality_checks_sql",
         conn_id=TF2_TRINO_CONN_ID,
-        sql=load_sql("infra/trino/queries/quality/data_quality_checks.sql"),
+        sql=load_sql("infra/trino/queries/quality/serving_quality_checks.sql"),
         execution_timeout=CHECK_TIMEOUT,
     )
 
@@ -106,6 +106,19 @@ with DAG(
         op_kwargs={"sql_task_id": "ml_readiness_checks_sql"},
     )
 
+    platform_quality_checks_sql = SQLExecuteQueryOperator(
+        task_id="platform_quality_checks_sql",
+        conn_id=TF2_TRINO_CONN_ID,
+        sql=load_sql("infra/trino/queries/quality/data_quality_checks.sql"),
+        execution_timeout=CHECK_TIMEOUT,
+    )
+
+    platform_quality_checks_assert = PythonOperator(
+        task_id="platform_quality_checks_assert",
+        python_callable=assert_sql_task_has_no_failures,
+        op_kwargs={"sql_task_id": "platform_quality_checks_sql"},
+    )
+
     maybe_run_baseline_training = ShortCircuitOperator(
         task_id="maybe_run_baseline_training",
         python_callable=should_run_baseline_training,
@@ -132,5 +145,6 @@ with DAG(
 
     validate_config >> spark_feature_serving_incremental >> serving_quality_checks_sql >> serving_quality_checks_assert
     serving_quality_checks_assert >> spark_ml_incremental >> ml_readiness_checks_sql >> ml_readiness_checks_assert
-    ml_readiness_checks_assert >> maybe_run_baseline_training >> ml_baseline_training
-    ml_readiness_checks_assert >> maybe_run_iceberg_maintenance >> iceberg_maintenance
+    ml_readiness_checks_assert >> platform_quality_checks_sql >> platform_quality_checks_assert
+    platform_quality_checks_assert >> maybe_run_baseline_training >> ml_baseline_training
+    platform_quality_checks_assert >> maybe_run_iceberg_maintenance >> iceberg_maintenance

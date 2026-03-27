@@ -205,15 +205,19 @@ export async function runIngest(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Failed to process log ${summary.id}: ${message}`);
-        updateFailure(state, summary, message, nowEpochMs, deliveredDatasets);
+        if (!dryRun) {
+          updateFailure(state, summary, message, nowEpochMs, deliveredDatasets);
+        }
       }
 
       await sleep(config.requestDelayMs);
     }
 
-    state.updatedAt = nowIso;
-    pruneFailures(state, config.maxFailedLogs);
-    await writeState(env, state);
+    if (!dryRun) {
+      state.updatedAt = nowIso;
+      pruneFailures(state, config.maxFailedLogs);
+      await writeState(env, state);
+    }
 
     console.log("Ingest run complete");
 

@@ -46,6 +46,7 @@ Dashboard (`infra/trino/queries/dashboard`):
 
 Quality (`infra/trino/queries/quality`):
 
+- `serving_quality_checks.sql`
 - `data_quality_checks.sql`
 - `serving_query_performance_benchmark.sql`
 

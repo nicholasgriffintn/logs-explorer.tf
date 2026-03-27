@@ -54,7 +54,7 @@ with DAG(
     serving_quality_checks_sql = SQLExecuteQueryOperator(
         task_id="serving_quality_checks_sql",
         conn_id=TF2_TRINO_CONN_ID,
-        sql=load_sql("infra/trino/queries/quality/data_quality_checks.sql"),
+        sql=load_sql("infra/trino/queries/quality/serving_quality_checks.sql"),
         execution_timeout=CHECK_TIMEOUT,
     )
 

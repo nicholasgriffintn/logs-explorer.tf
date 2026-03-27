@@ -56,6 +56,7 @@ MAINTENANCE_TABLES = [
     "ml_model_stage_history",
     "serving_ml_model_registry",
     "serving_ml_pipeline_progress_daily",
+    "serving_ml_prediction_quality_daily",
 ]
 
 REQUIRED_RUNTIME_VARIABLES = [

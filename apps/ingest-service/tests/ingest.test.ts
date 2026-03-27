@@ -235,6 +235,59 @@ test("runIngest fetches new logs and emits them", async () => {
   expect(playersStream.batches.flat()).toHaveLength(2);
 });
 
+test("runIngest dry-run does not mutate persisted state", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+
+  const originalState = {
+    lastIngestedLogId: 4031000,
+    failedLogs: {
+      "4030999": {
+        summary: {
+          id: 4030999,
+          title: "log-4030999",
+          map: "cp_snakewater_final1",
+          date: 1774213000,
+          views: 0,
+          players: 12,
+        },
+        attempts: 2,
+        nextAttemptAtEpochMs: 0,
+        lastError: "temporary failure",
+      },
+    },
+    updatedAt: "2026-03-22T12:00:00.000Z",
+  };
+  await kv.put(CURSOR_STATE_KEY, JSON.stringify(originalState));
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const result = await runIngest(env, {
+    dryRun: true,
+    fetchFn: makeFetchStub([]),
+    now: new Date("2026-03-22T12:05:00.000Z"),
+  });
+
+  const persistedState = await kv.get(CURSOR_STATE_KEY);
+  expect(persistedState).toBe(JSON.stringify(originalState));
+  expect(result.emittedCoreLogs).toBe(0);
+  expect(result.emittedChatMessages).toBe(0);
+  expect(result.emittedPlayerSummaries).toBe(0);
+  expect(result.lastIngestedLogId).toBe(4031000);
+  expect(result.failedLogs).toBe(1);
+});
+
 test("runIngest full-history mode returns a continuation offset when more pages exist", async () => {
   const kv = new MemoryKv();
   const logsStream = new MemoryStream<unknown>();

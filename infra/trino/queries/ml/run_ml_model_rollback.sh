@@ -43,7 +43,7 @@ WHERE model_name = '${MODEL_NAME_SQL}'
   AND stage IN ('staging', 'archived', 'production')
 ORDER BY COALESCE(promoted_at, created_at) DESC
 LIMIT 1
-" | awk 'NR==2 {print $1}'
+" | awk 'NR==1 {print $1}'
   )"
 fi
 
