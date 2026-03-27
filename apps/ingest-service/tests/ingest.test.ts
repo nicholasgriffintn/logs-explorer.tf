@@ -563,3 +563,153 @@ test("runIngest caps due retries per run", async () => {
   expect(result.failedLogs).toBe(1);
   expect(logsStream.batches.flat()).toHaveLength(2);
 });
+
+function parseJsonBody(init: RequestInit | undefined): Record<string, unknown> {
+  if (!init || typeof init.body !== "string") {
+    throw new Error("Expected OpenLineage request body to be a JSON string");
+  }
+  return JSON.parse(init.body) as Record<string, unknown>;
+}
+
+test("runIngest emits OpenLineage START and COMPLETE events when enabled", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+  const lineageEvents: Record<string, unknown>[] = [];
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    OPENLINEAGE_ENABLED: "true",
+    OPENLINEAGE_URL: "http://lineage.local",
+    OPENLINEAGE_ENDPOINT: "api/v1/lineage",
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url === "http://lineage.local/api/v1/lineage") {
+      lineageEvents.push(parseJsonBody(init));
+      return new Response("", { status: 201 });
+    }
+
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const result = await runIngest(env, {
+      fetchFn: makeFetchStub([]),
+      now: new Date("2026-03-22T12:00:00.000Z"),
+    });
+
+    expect(result.emittedCoreLogs).toBe(2);
+    expect(lineageEvents).toHaveLength(2);
+    expect(lineageEvents.map((event) => event.eventType)).toEqual(["START", "COMPLETE"]);
+
+    const startRun = lineageEvents[0].run as { runId?: string };
+    const completeRun = lineageEvents[1].run as { runId?: string };
+    expect(startRun.runId).toBeDefined();
+    expect(completeRun.runId).toBe(startRun.runId);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runIngest fails when OpenLineage START emission fails", async () => {
+  const kv = new MemoryKv();
+  const logsStream = new MemoryStream<unknown>();
+  const chatStream = new MemoryStream<unknown>();
+  const playersStream = new MemoryStream<unknown>();
+
+  const env: IngestEnv = {
+    INGEST_CURSOR_KV: kv,
+    TF2_LOGS_STREAM: logsStream,
+    TF2_CHAT_STREAM: chatStream,
+    TF2_PLAYERS_STREAM: playersStream,
+    OPENLINEAGE_ENABLED: "true",
+    OPENLINEAGE_URL: "http://lineage.local",
+    OPENLINEAGE_ENDPOINT: "api/v1/lineage",
+    LOGS_TF_PAGE_SIZE: "50",
+    LOGS_TF_MAX_PAGES_PER_RUN: "1",
+    LOGS_TF_REQUEST_DELAY_MS: "1",
+    PIPELINES_BATCH_SIZE: "10",
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "http://lineage.local/api/v1/lineage") {
+      return new Response("lineage unavailable", {
+        status: 500,
+        statusText: "Internal Server Error",
+      });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    await expect(
+      runIngest(env, {
+        fetchFn: makeFetchStub([]),
+        now: new Date("2026-03-22T12:00:00.000Z"),
+      }),
+    ).rejects.toThrow(/OpenLineage endpoint returned 500/);
+
+    expect(logsStream.batches.flat()).toHaveLength(0);
+    expect(chatStream.batches.flat()).toHaveLength(0);
+    expect(playersStream.batches.flat()).toHaveLength(0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runIngest emits FAIL event when ingest run errors", async () => {
+  const kv = new MemoryKv();
+  const lineageEvents: Record<string, unknown>[] = [];
+
+  const env = {
+    INGEST_CURSOR_KV: kv,
+    OPENLINEAGE_ENABLED: "true",
+    OPENLINEAGE_URL: "http://lineage.local",
+    OPENLINEAGE_ENDPOINT: "api/v1/lineage",
+  } as unknown as IngestEnv;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "http://lineage.local/api/v1/lineage") {
+      lineageEvents.push(parseJsonBody(init));
+      return new Response("", { status: 201 });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    await expect(
+      runIngest(env, {
+        fetchFn: makeFetchStub([]),
+        now: new Date("2026-03-22T12:00:00.000Z"),
+      }),
+    ).rejects.toThrow(/TF2_LOGS_STREAM/);
+
+    expect(lineageEvents).toHaveLength(2);
+    expect(lineageEvents.map((event) => event.eventType)).toEqual(["START", "FAIL"]);
+
+    const failFacets = (lineageEvents[1].run as { facets?: Record<string, unknown> }).facets;
+    const errorMessage = (failFacets?.errorMessage as { message?: string }).message ?? "";
+    expect(errorMessage).toContain("TF2_LOGS_STREAM");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -150,20 +150,12 @@ async function postEvent(config: LineageConfig, payload: OpenLineageEvent): Prom
   }
 }
 
-async function safePost(config: LineageConfig, payload: OpenLineageEvent): Promise<void> {
+async function postIfEnabled(config: LineageConfig, payload: OpenLineageEvent): Promise<void> {
   if (!config.enabled) {
     return;
   }
 
-  try {
-    await postEvent(config, payload);
-  } catch (error) {
-    console.warn("Failed to emit OpenLineage event", {
-      endpoint: config.endpointUrl,
-      eventType: payload.eventType,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  await postEvent(config, payload);
 }
 
 function startEvent(
@@ -292,13 +284,13 @@ export function createIngestLineageEmitter(env: IngestEnv): IngestLineageEmitter
   return {
     runId: currentRunId,
     emitStart(eventTime, meta) {
-      return safePost(config, startEvent(config, currentRunId, eventTime, meta));
+      return postIfEnabled(config, startEvent(config, currentRunId, eventTime, meta));
     },
     emitComplete(eventTime, meta, result) {
-      return safePost(config, completeEvent(config, currentRunId, eventTime, meta, result));
+      return postIfEnabled(config, completeEvent(config, currentRunId, eventTime, meta, result));
     },
     emitFail(eventTime, meta, error) {
-      return safePost(config, failEvent(config, currentRunId, eventTime, meta, error));
+      return postIfEnabled(config, failEvent(config, currentRunId, eventTime, meta, error));
     },
   };
 }
