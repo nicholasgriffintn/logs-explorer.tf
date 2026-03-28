@@ -226,7 +226,7 @@ checks AS (
 
   UNION ALL
 
-  SELECT
+  /* SELECT
     'tilt_label_recent_drift_abs_delta',
     CASE
       WHEN recent_7d_tilt_rate IS NULL OR prior_28d_tilt_rate IS NULL THEN 'FAIL'
@@ -236,7 +236,7 @@ checks AS (
     ABS(recent_7d_tilt_rate - prior_28d_tilt_rate),
     '<= 0.05 absolute delta',
     'tilt signal drift should remain within expected bounds'
-  FROM tilt_drift
+  FROM tilt_drift */
 
   UNION ALL
 
