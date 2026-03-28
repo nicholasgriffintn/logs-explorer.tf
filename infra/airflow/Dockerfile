@@ -17,4 +17,5 @@ RUN pip install --no-cache-dir \
   apache-airflow-providers-openlineage \
   apache-airflow-providers-trino \
   pyspark==3.5.5 \
+  spark-nlp==5.5.3 \
   -r /tmp/ml-requirements.txt

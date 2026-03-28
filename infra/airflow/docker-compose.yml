@@ -42,8 +42,10 @@ x-airflow-env: &airflow-env
   OPENLINEAGE_SPARK_ENABLED: "${OPENLINEAGE_SPARK_ENABLED:-true}"
   OPENLINEAGE_SPARK_NAMESPACE: "${OPENLINEAGE_SPARK_NAMESPACE:-tf2-spark}"
   OPENLINEAGE_SPARK_PACKAGE_VERSION: "${OPENLINEAGE_SPARK_PACKAGE_VERSION:-1.36.0}"
+  SPARK_NLP_VERSION: "${SPARK_NLP_VERSION:-5.5.3}"
 
 x-airflow-common: &airflow-common
+  platform: "${AIRFLOW_PLATFORM:-linux/amd64}"
   build:
     context: ../..
     dockerfile: infra/airflow/Dockerfile
@@ -115,6 +117,7 @@ services:
           OPENLINEAGE_SPARK_ENABLED \
           OPENLINEAGE_SPARK_NAMESPACE \
           OPENLINEAGE_SPARK_PACKAGE_VERSION \
+          SPARK_NLP_VERSION \
           CATALOG_URI \
           WAREHOUSE \
           R2_CATALOG_TOKEN \

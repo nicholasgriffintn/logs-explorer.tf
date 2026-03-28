@@ -20,12 +20,14 @@ TF2_AIRFLOW_E2E_CRON = Variable.get("TF2_AIRFLOW_E2E_CRON", default_var="30 2 * 
 TF2_AIRFLOW_MAINTENANCE_CRON = Variable.get("TF2_AIRFLOW_MAINTENANCE_CRON", default_var="0 5 * * 0")
 
 REFRESH_DAYS = Variable.get("REFRESH_DAYS", default_var="7")
+SPARK_NLP_VERSION = Variable.get("SPARK_NLP_VERSION", default_var="5.5.3")
 SPARK_APPLICATION = f"{TF2_REPO_ROOT}/infra/spark/jobs/build_processing.py"
 SPARK_BASE_PACKAGES = [
     "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2",
     "org.apache.hadoop:hadoop-aws:3.3.4",
     "software.amazon.awssdk:bundle:2.20.160",
     "software.amazon.awssdk:url-connection-client:2.20.160",
+    f"com.johnsnowlabs.nlp:spark-nlp_2.12:{SPARK_NLP_VERSION}",
 ]
 
 START_DATE = datetime(2025, 1, 1)

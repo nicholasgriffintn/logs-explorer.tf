@@ -65,6 +65,7 @@ Optional tuning values:
 - `SPARK_EXECUTOR_MEMORY` (default `6g`)
 - `SPARK_SQL_SHUFFLE_PARTITIONS` (default `512`)
 - `SPARK_DEFAULT_PARALLELISM` (default `256`)
+- `SPARK_NLP_VERSION` (default `5.5.3`)
 - `SPARK_ICEBERG_VECTORIZATION_ENABLED` (default `false`)
 - `SPARK_PARQUET_VECTORIZED_READER_ENABLED` (default `false`)
 - `SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED` (default `false`)

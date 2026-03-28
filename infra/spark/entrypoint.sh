@@ -14,6 +14,8 @@ SPARK_DEFAULT_PARALLELISM="${SPARK_DEFAULT_PARALLELISM:-256}"
 SPARK_ICEBERG_VECTORIZATION_ENABLED="${SPARK_ICEBERG_VECTORIZATION_ENABLED:-false}"
 SPARK_PARQUET_VECTORIZED_READER_ENABLED="${SPARK_PARQUET_VECTORIZED_READER_ENABLED:-false}"
 SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED="${SPARK_PARQUET_NESTED_VECTORIZED_READER_ENABLED:-false}"
+SPARK_NLP_VERSION="${SPARK_NLP_VERSION:-5.5.3}"
+SPARK_PACKAGES="org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,software.amazon.awssdk:bundle:2.20.160,software.amazon.awssdk:url-connection-client:2.20.160,com.johnsnowlabs.nlp:spark-nlp_2.12:${SPARK_NLP_VERSION}"
 
 required_vars=(
   CATALOG_URI
@@ -71,7 +73,7 @@ exec "$SPARK_SUBMIT_BIN" \
   --master "${SPARK_MASTER}" \
   --driver-memory "${SPARK_DRIVER_MEMORY}" \
   --conf "spark.executor.memory=${SPARK_EXECUTOR_MEMORY}" \
-  --packages "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,software.amazon.awssdk:bundle:2.20.160,software.amazon.awssdk:url-connection-client:2.20.160" \
+  --packages "${SPARK_PACKAGES}" \
   --conf "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions" \
   --conf "spark.sql.iceberg.vectorization.enabled=${SPARK_ICEBERG_VECTORIZATION_ENABLED}" \
   --conf "spark.sql.parquet.enableVectorizedReader=${SPARK_PARQUET_VECTORIZED_READER_ENABLED}" \
